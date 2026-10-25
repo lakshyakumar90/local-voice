@@ -28,19 +28,24 @@ import dev.localvoice.app.data.UserSettings
     var audioDisclosure by remember { mutableStateOf(false) }
     var excluded by remember { mutableStateOf("") }
     var privacy by remember { mutableStateOf(false) }
+    var permissionHelp by remember { mutableStateOf(false) }
     fun open(action: String) { runCatching { context.startActivity(Intent(action)) }.onFailure { message("Open this app's settings in Android Settings.") } }
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
         Text("Dictation",style=MaterialTheme.typography.titleMedium)
         LanguageChips(prefs.language) { action {check(!graph.session.busy) {"Finish dictation before changing language."};graph.settings.language(it)} }
+        Text("English + Roman Hindi keeps English words and writes recognized Hindi in English letters: मुझे कल जाना है → mujhe kal jaana hai. Use a multilingual Whisper model. English-only mode/models cannot preserve Hindi reliably.",style=MaterialTheme.typography.bodyMedium)
         Text("Appearance",style=MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("light","dark","system").forEach {mode -> FilterChip(selected=prefs.theme==mode,onClick={action {graph.settings.theme(mode)}},label={Text(mode.replaceFirstChar {it.uppercase()})})}}
         HorizontalDivider()
         Text("Cross-app dictation",style=MaterialTheme.typography.titleMedium)
         Text("The bubble opens a small visible recording window. Local Voice only inserts into supported fields, and never sends a message.",style=MaterialTheme.typography.bodyMedium)
         SettingRow("Display over other apps",if(Settings.canDrawOverlays(context)) "Allowed" else "Required for the bubble",Icons.Outlined.ChatBubbleOutline) {
-            runCatching {context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:${context.packageName}")))}.onFailure {message("Find Display over other apps in Android Settings.")}
+            runCatching {context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:${context.packageName}")))}.onFailure {
+                runCatching {context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))}.onFailure {permissionHelp=true}
+            }
         }
         SettingRow("Accessibility access",if(connected) "Connected" else "Read the disclosure before enabling",Icons.Outlined.AccessibilityNew) {disclosure=true}
+        OutlinedButton(onClick={permissionHelp=true},modifier=Modifier.fillMaxWidth()) {Text("Permission disabled or restricted?")}
         SwitchRow("Floating microphone",if(prefs.bubble) "Enabled when a compatible field is focused. Long press the bubble to hide it." else "Off",prefs.bubble) {enabled ->
             if(enabled && (!connected || !prefs.accessibilityConsent || !Settings.canDrawOverlays(context))) message("Allow the overlay and accessibility access first.")
             else action {graph.settings.bubble(enabled)}
@@ -68,6 +73,12 @@ import dev.localvoice.app.data.UserSettings
         Text("Local Voice · development build\nNo account, ads, transcript analytics or cloud recognition.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
     }
+    if(permissionHelp) AlertDialog(onDismissRequest={permissionHelp=false},title={Text("Android restricted settings")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        Text("Android can block sensitive access for apps installed from an APK. The warning about personal and financial information is Android's permission warning; Local Voice cannot dismiss it or enable access itself.")
+        Text("If you trust this build: open App info below → the top-right ⋮ menu → Allow restricted settings, then complete Android's confirmation. Return here, read the accessibility disclosure, and enable Local Voice in Accessibility → downloaded/installed apps. Menu names vary by phone.")
+        Text("Display over other apps is a separate setting. Return to that row and select Local Voice in Android's list. Allowing restricted settings does not grant overlay or accessibility access automatically.")
+        Text("If the option is missing or still disabled, a device administrator, work profile, parental controls or your phone's security policy may be preventing it. Those restrictions must be resolved in device settings; reinstalling or changing the app cannot safely override them. In-app recording, Copy and export work without these two special permissions.")
+    }},confirmButton={TextButton(onClick={runCatching {context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:${context.packageName}")))}.onFailure {message("Open Android Settings → Apps → Local Voice.")}}) {Text("Open app info")}},dismissButton={TextButton(onClick={permissionHelp=false}) {Text("Close")}})
     if(disclosure) AlertDialog(onDismissRequest={disclosure=false},title={Text("Accessibility access")},text={Column(Modifier.verticalScroll(rememberScrollState())) {
         Text("To show the microphone near supported text fields and insert text you dictate, Local Voice uses Android Accessibility. It can access information about the active screen, including editable fields. When you start dictation and when its result is inserted, it briefly reads the field's text and selection to check that they have not changed and preserve existing text. Screen contents are not saved or sent to a server. This access is not used to monitor messages, send messages, or automate other actions. Protected and unsupported editors use manual Copy instead. You can turn this access off in Android Settings.")
     }},confirmButton={TextButton(onClick={action {graph.settings.consent();disclosure=false;open(Settings.ACTION_ACCESSIBILITY_SETTINGS)}}) {Text("Agree and open settings")}},dismissButton={TextButton(onClick={disclosure=false}) {Text("Not now")}})

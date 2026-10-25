@@ -17,8 +17,15 @@ class MainActivity : ComponentActivity() {
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); if(intent.action=="dev.localvoice.DICTATE") record() }
     private fun record() { startActivity(Intent(this,RecordingActivity::class.java)) }
+    override fun onKeyDown(keyCode: Int,event: KeyEvent): Boolean {
+        if(keyCode==KeyEvent.KEYCODE_SPACE && event.isCtrlPressed && event.isShiftPressed) {
+            if(event.repeatCount==0) record()
+            return true
+        }
+        return super.onKeyDown(keyCode,event)
+    }
     override fun onKeyShortcut(keyCode: Int,event: KeyEvent): Boolean {
-        if(keyCode==KeyEvent.KEYCODE_SPACE && event.isCtrlPressed && event.isShiftPressed) { record();return true }
+        if(keyCode==KeyEvent.KEYCODE_SPACE && event.isCtrlPressed && event.isShiftPressed) { if(event.repeatCount==0) record();return true }
         return super.onKeyShortcut(keyCode,event)
     }
 }

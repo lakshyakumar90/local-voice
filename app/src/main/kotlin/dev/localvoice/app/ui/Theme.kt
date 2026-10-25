@@ -3,6 +3,10 @@ package dev.localvoice.app.ui
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import android.app.Activity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,5 +31,13 @@ private val Type=Typography(
 )
 @Composable fun LocalVoiceTheme(theme: String="light",content: @Composable () -> Unit) {
     val dark=theme=="dark" || theme=="system" && isSystemInDarkTheme()
+    val view=LocalView.current
+    if(!view.isInEditMode) SideEffect {
+        val window=(view.context as? Activity)?.window
+        if(window!=null) WindowCompat.getInsetsController(window,view).apply {
+            isAppearanceLightStatusBars=!dark
+            isAppearanceLightNavigationBars=!dark
+        }
+    }
     MaterialTheme(colorScheme=if(dark) Dark else Light,typography=Type,content=content)
 }

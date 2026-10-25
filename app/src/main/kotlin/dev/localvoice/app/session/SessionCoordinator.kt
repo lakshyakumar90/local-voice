@@ -135,7 +135,8 @@ class SessionCoordinator(private val graph: AppGraph) {
                     if(raw.isBlank() && crop !== audio) engine!!.transcribe(audio,language) else raw
                 }
                 if(token != generation) return@launch
-                val text=TranscriptText.normalize(result)
+                val normalized=TranscriptText.normalize(result)
+                val text=if(language==LanguageMode.MIXED) RomanHindi.convert(normalized) else normalized
                 require(text.isNotBlank()) { "No speech detected. Try recording again." }
                 var saved: String?=null
                 var warning=""

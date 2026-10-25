@@ -11,6 +11,10 @@ import dev.localvoice.app.ui.RecordingActivity
 class DictationTileService : TileService() {
     override fun onStartListening() { qsTile?.apply { state=Tile.STATE_INACTIVE; label="Dictate locally"; updateTile() } }
     override fun onClick() {
+        if(isLocked) {unlockAndRun {launchDictation()};return}
+        launchDictation()
+    }
+    private fun launchDictation() {
         val intent=Intent(this,RecordingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if(Build.VERSION.SDK_INT>=34) startActivityAndCollapse(PendingIntent.getActivity(this,55,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         else launchBeforeAndroid14(intent)
