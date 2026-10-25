@@ -1,0 +1,2 @@
+-keep class dev.localvoice.engine.WhisperNative { *; }
+-keep class ai.moonshine.voice.** { *; }

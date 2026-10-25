@@ -8,7 +8,7 @@ android
 
 ## Stack
 
-Proposed in the existing engineering plan: Kotlin/Jetpack Compose with native Android services and C/C++/JNI inference adapters. This request concerns research and design documentation, not application implementation.
+Implemented foundation: Kotlin/Jetpack Compose, native Android services, Room/DataStore, C/C++/JNI Whisper inference and Moonshine's Android JNI runtime. See `docs/IMPLEMENTATION_STATUS.md` for verification and remaining device gates.
 
 ## Users
 
@@ -36,7 +36,7 @@ User confirmed on 2026-10-25: **light mode is the primary direction**; document 
 
 ## Evidence on Hand
 
-Eight engineering planning documents in `docs/planning/`; upstream evidence in `work/research/`; user-supplied Handy desktop model-library screenshot. This turn adds attributed reference captures and a design specification. There is no runnable Android app, measured phone performance, or approved final visual composition.
+Engineering planning documents in `docs/planning/`, attributed design references and a light-first specification, plus the native Android source and build scripts. Debug packaging and JVM behavior tests are available; phone performance and the final on-device composition remain unmeasured. Local Voice is a temporary independent app label.
 
 ## Product Principles
 

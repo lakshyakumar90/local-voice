@@ -1,0 +1,15 @@
+<resources>
+    <style name="Theme.LocalVoice" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:colorAccent">#006B5D</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="Theme.LocalVoice.Recording" parent="Theme.LocalVoice">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowMinWidthMajor">90%</item>
+        <item name="android:windowMinWidthMinor">95%</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+</resources>

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Local Voice</string>
+    <string name="shortcut_record">Dictate locally</string>
+    <string name="accessibility_description">Finds supported focused text fields and inserts only the text you explicitly dictate. Screen contents are not saved or transmitted. Disable access anytime in Android Settings.</string>
+</resources>
