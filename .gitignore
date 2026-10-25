@@ -1,0 +1,17 @@
+.gradle/
+.kotlin/
+.idea/
+local.properties
+**/build/
+**/.cxx/
+work/
+.impeccable/
+*.jks
+*.keystore
+*.hprof
+captures/
+models/
+*.part
+.DS_Store
+vendor/whisper.cpp/
+!gradle/wrapper/gradle-wrapper.jar
