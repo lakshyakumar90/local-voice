@@ -4,6 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class RomanHindiTest {
+    @Test fun userReportedPhraseUsesMedialSchwaDeletion() {
+        assertEquals("kya tum mujhe jaante ho",RomanHindi.convert("क्या तुम मुझे जानते हो"))
+        assertEquals("jaante",RomanHindi.convert("जानते"))
+    }
     @Test fun mixedSpeechIsRomanizedWithoutTranslation() {
         assertEquals("Meet tomorrow, mujhe kal jaana hai.",RomanHindi.convert("Meet tomorrow, मुझे कल जाना है।"))
     }

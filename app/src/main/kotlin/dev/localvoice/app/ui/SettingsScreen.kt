@@ -33,7 +33,7 @@ import dev.localvoice.app.data.UserSettings
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
         Text("Dictation",style=MaterialTheme.typography.titleMedium)
         LanguageChips(prefs.language) { action {check(!graph.session.busy) {"Finish dictation before changing language."};graph.settings.language(it)} }
-        Text("English + Roman Hindi keeps English words and writes recognized Hindi in English letters: मुझे कल जाना है → mujhe kal jaana hai. Use a multilingual Whisper model. English-only mode/models cannot preserve Hindi reliably.",style=MaterialTheme.typography.bodyMedium)
+        Text("English + Roman Hindi uses Hindi-led recognition to avoid automatic Urdu detection, then writes Hindi in English letters: मुझे कल जाना है → mujhe kal jaana hai. Use English mode for entirely English recordings. For Hindi with English words, use multilingual Whisper; try Small if Base misses words. Recognition and Roman spelling can still make mistakes.",style=MaterialTheme.typography.bodyMedium)
         Text("Appearance",style=MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("light","dark","system").forEach {mode -> FilterChip(selected=prefs.theme==mode,onClick={action {graph.settings.theme(mode)}},label={Text(mode.replaceFirstChar {it.uppercase()})})}}
         HorizontalDivider()
@@ -60,6 +60,8 @@ import dev.localvoice.app.data.UserSettings
         SwitchRow("Keep recording audio","Off by default. Optional encrypted recordings are saved with history and can be exported as WAV.",prefs.retainAudio) {if(it) audioDisclosure=true else action {graph.settings.audio(false)}}
         SettingRow("Saved transcripts","Copy, export or delete your local text and recordings",Icons.Outlined.History,history)
         HorizontalDivider()
+        Text("If Android shows a separate Accessibility shortcut button on the edge of the screen: open Android Accessibility settings → Local Voice and switch off only Local Voice shortcut / Accessibility button. Keep Use Local Voice enabled for the input-field microphone. This system shortcut is managed by Android, not by the app.",style=MaterialTheme.typography.bodyMedium)
+        TextButton(onClick={open(Settings.ACTION_ACCESSIBILITY_SETTINGS)}) {Text("Manage Android accessibility shortcut")}
         Text("Shortcuts",style=MaterialTheme.typography.titleMedium)
         SettingRow("Add dictation shortcut","Launcher shortcut. Quick Settings tile can also be added from the system tile editor.",Icons.Outlined.AddToHomeScreen) {
             val shortcuts=context.getSystemService(ShortcutManager::class.java)

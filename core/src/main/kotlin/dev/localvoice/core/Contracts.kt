@@ -3,7 +3,7 @@ package dev.localvoice.core
 import java.io.File
 
 enum class LanguageMode(val label: String, val whisperCode: String) {
-    ENGLISH("English", "en"), HINDI("Hindi script", "hi"), MIXED("English + Roman Hindi", "auto")
+    ENGLISH("English", "en"), HINDI("Hindi script", "hi"), MIXED("English + Roman Hindi", "hi")
 }
 
 enum class EngineId { WHISPER, MOONSHINE }
