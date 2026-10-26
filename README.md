@@ -7,7 +7,7 @@ An offline-first Android voice typing app built in Kotlin and Jetpack Compose. `
 1. Build and install the debug APK, then open Local Voice.
 2. Open **Models** and explicitly download Whisper Base Q5_1 (recommended starting point for English, Hindi and mixed speech). Downloads require a connection; recognition runs on the phone afterward.
 3. Tap **Try dictation**, grant microphone permission, speak, then stop. Copy, save or export the resulting text.
-4. For other apps, read the accessibility disclosure in Settings, grant overlay permission and enable the accessibility service. Tap the floating microphone beside a supported focused text field. Text is inserted only after transcription and target validation; otherwise use Copy.
+4. For other apps, open **Settings → Microphone in other apps**, read the accessibility disclosure, grant overlay permission and enable the service. Tap the mic beside a focused field. After a visible microphone-start handoff, a floating Stop/Cancel bar stays over the editor. Final text is inserted after target validation; otherwise use Copy.
 5. Focus a supported input field to show the microphone bubble. If Android shows its own separate Accessibility shortcut button, turn off only **Local Voice shortcut / Accessibility button** in system Accessibility settings; keep the service enabled for the input-field bubble. The launcher, keyboard and Quick Settings app shortcuts remain available.
 
 Recording is explicit and limited to two minutes. A visible recording activity starts microphone capture through a foreground service. The app never presses Send. Password fields and excluded apps are not eligible for insertion.
@@ -30,7 +30,7 @@ The catalog pins artifact sizes and SHA-256 hashes. Downloads support verified r
 
 Automatic history and audio retention are off by default. **Save** explicitly keeps a transcript locally. Optional audio retention requires separate consent and enables history. Transcript payloads and retained WAV files use Android Keystore-backed AES-GCM encryption; metadata such as date, model and duration remains in Room. History older than seven days is pruned when the app starts. Android backup is disabled.
 
-History supports viewing, explicit Copy, text export, optional WAV export, individual deletion and clearing all history. Exports use Android's document picker; exported files are outside the app's retention rules. Unsaved results expire from app state after five minutes. The app has no account, analytics service or cloud inference endpoint. Internet permission is used for requested model downloads.
+History supports full-page transcript details, in-app play/pause/seek for saved recordings, explicit Copy, text/WAV export, individual deletion and clearing all history. Playback uses decrypted memory, without a plaintext playback file. Text-only entries cannot recover audio that was never saved. Enable **Settings → History & recordings → Keep recordings with history** for future recordings. Exports use Android's document picker; exported files are outside app retention rules. Unsaved results expire from app state after five minutes. The app has no account, analytics service or cloud inference endpoint. Internet permission is used for requested model downloads.
 
 ## Build
 

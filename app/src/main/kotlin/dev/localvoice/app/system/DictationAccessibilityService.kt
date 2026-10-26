@@ -13,12 +13,13 @@ import android.view.accessibility.AccessibilityNodeInfo
 import dev.localvoice.app.graph
 import dev.localvoice.app.ui.RecordingActivity
 import dev.localvoice.core.TextInsertion
+import dev.localvoice.core.SessionPhase
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.security.MessageDigest
 import java.util.UUID
 
-private data class Target(val token: String,val pkg: String,val window: Int,val viewId: String?,val nodeKey: Int,val klass: String,val bounds: Rect,val digest: ByteArray,val salt: String,val start: Int,val end: Int,val generation: Long,val createdAt: Long = android.os.SystemClock.elapsedRealtime())
+private data class Target(val token: String,val pkg: String,val window: Int,val viewId: String?,val node: AccessibilityNodeInfo,val klass: String,val digest: ByteArray,val salt: String,val start: Int,val end: Int,val generation: Long,val createdAt: Long = android.os.SystemClock.elapsedRealtime())
 class DictationAccessibilityService : AccessibilityService() {
     companion object {
         var connected: DictationAccessibilityService? = null; private set
@@ -26,21 +27,44 @@ class DictationAccessibilityService : AccessibilityService() {
     }
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
     private lateinit var bubble: BubbleOverlay
+    private lateinit var controls: RecordingOverlay
+    private var overlayFlow: String?=null
+    private var detached=false
+    private var overlayStarted=false
+    private var delivering=false
     private var target: Target?=null
+    private var targetExpiry: Job?=null
     private var generation=0L
     private var lastExternal: String?=null
     private var refresh: Job?=null
     override fun onServiceConnected() {
         connected=this; isConnected.value=true; bubble=BubbleOverlay(this,::record)
+        controls=RecordingOverlay(this,{graph.session.stop()},{graph.session.cancel()})
         scope.launch { graph.preferences.collect { updateBubble() } }
-        scope.launch { graph.session.state.collect { updateBubble() } }
+        scope.launch { graph.session.state.collect { state ->
+            if(overlayFlow!=null && state.phase in listOf(SessionPhase.PREPARING,SessionPhase.RECORDING,SessionPhase.PROCESSING)) overlayStarted=true
+            updateBubble()
+            if(detached && state.phase==SessionPhase.RESULT && !delivering) {
+                detached=false;overlayStarted=false;overlayFlow=null;delivering=true;controls.hide();bubble.visible(false)
+                deliver(target?.token.orEmpty(),state.transcript) {failure ->
+                    delivering=false
+                    if(failure==null) {
+                        if(graph.session.state.value===state) graph.session.reset()
+                        android.widget.Toast.makeText(this@DictationAccessibilityService,"Text inserted",android.widget.Toast.LENGTH_SHORT).show()
+                    } else {graph.session.resultMessage(failure);showFallback()}
+                    updateBubble()
+                }
+            } else if(detached && state.phase==SessionPhase.ERROR) {
+                detached=false;overlayStarted=false;overlayFlow=null;controls.hide();clearTarget();showFallback()
+            } else if(state.phase==SessionPhase.IDLE && overlayStarted) {detached=false;overlayStarted=false;overlayFlow=null;controls.hide();clearTarget()}
+        } }
         updateBubble()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg=event?.packageName?.toString()
         if(pkg != null && pkg != packageName && event.eventType in listOf(AccessibilityEvent.TYPE_VIEW_FOCUSED,AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)) {
             val node=focus()
-            val key=node?.let { "$pkg:${it.windowId}:${it.viewIdResourceName}:${bounds(it)}" }
+            val key=node?.let { "$pkg:${it.windowId}:${it.viewIdResourceName}:${it.hashCode()}" }
             if(key != null && lastExternal != null && lastExternal != key) generation++
             if(key != null) lastExternal=key
         }
@@ -61,30 +85,52 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun updateBubble() {
         if(!::bubble.isInitialized) return
         val prefs=graph.preferences.value
-        bubble.visible(prefs.bubble && prefs.accessibilityConsent && Settings.canDrawOverlays(this) && eligible(focus()) && !graph.session.busy)
+        if(detached && graph.session.busy && !Settings.canDrawOverlays(this)) {
+            graph.session.cancel();graph.session.fail("Overlay access was removed. Recording stopped; enable it before trying again.")
+            detached=false;controls.hide();clearTarget();showFallback();return
+        }
+        val active=detached && graph.session.busy && !getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        if(active) controls.show(graph.session.state.value) else controls.hide()
+        bubble.visible(!active && !delivering && prefs.bubble && prefs.accessibilityConsent && Settings.canDrawOverlays(this) && eligible(focus()) && !graph.session.busy)
     }
+    fun detachRecording(token: String): Boolean {
+        if(token!=overlayFlow || graph.session.state.value.phase!=SessionPhase.RECORDING || !Settings.canDrawOverlays(this)) return false
+        if(!controls.show(graph.session.state.value)) return false
+        detached=true;updateBubble();return true
+    }
+    private fun showFallback() {runCatching {startActivity(Intent(this,RecordingActivity::class.java).putExtra("showResult",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}}
+    @Suppress("DEPRECATION") private fun clearTarget() {targetExpiry?.cancel();targetExpiry=null;target?.node?.recycle();target=null}
     private fun digest(text: String,salt: String)=MessageDigest.getInstance("SHA-256").digest((salt+text).toByteArray(Charsets.UTF_8))
-    private fun record() {
+    @Suppress("DEPRECATION") private fun record() {
+        if(delivering || graph.session.busy) return
         val node=focus()
         if(!eligible(node)) { updateBubble(); return }
+        clearTarget();overlayFlow=null;detached=false;overlayStarted=false
+        graph.session.reset() // A new mic gesture must not reopen an earlier result/error.
         val n=node!!; val text=n.text?.toString()
+        lastExternal="${n.packageName}:${n.windowId}:${n.viewIdResourceName}:${n.hashCode()}"
         val salt=UUID.randomUUID().toString(); val token=UUID.randomUUID().toString()
-        val identified=n.viewIdResourceName!=null || android.os.Build.VERSION.SDK_INT>=33 && n.uniqueId!=null
-        target=if(identified && text != null && n.textSelectionStart>=0 && n.textSelectionEnd>=n.textSelectionStart) Target(token,n.packageName.toString(),n.windowId,n.viewIdResourceName,n.hashCode(),n.className.toString(),bounds(n),digest(text,salt),salt,n.textSelectionStart,n.textSelectionEnd,generation) else null
+        clearTarget()
+        target=if(text != null && n.textSelectionStart>=0 && n.textSelectionEnd>=n.textSelectionStart) Target(token,n.packageName.toString(),n.windowId,n.viewIdResourceName,AccessibilityNodeInfo.obtain(n),n.className.toString(),digest(text,salt),salt,n.textSelectionStart,n.textSelectionEnd,generation) else null
+        overlayFlow=token;detached=false
+        targetExpiry=scope.launch {delay(300_000);if(target?.token==token) clearTarget()}
         bubble.visible(false)
-        runCatching { startActivity(Intent(this,RecordingActivity::class.java).putExtra("target",target?.token).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            .onFailure { graph.session.fail("Open Local Voice to start recording. Android blocked the floating entry point.") }
+        runCatching { startActivity(Intent(this,RecordingActivity::class.java).putExtra("target",target?.token).putExtra("overlayFlow",token).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .onFailure { overlayFlow=null;clearTarget();graph.session.fail("Open Local Voice to start recording. Android blocked the floating entry point.") }
     }
     fun deliver(token: String,text: String,onResult: (String?) -> Unit) {
         val saved=target
+        val expectedResult=graph.session.state.value
+        overlayFlow=null
         target=null // A target is single use; no duplicate action after an uncertain acknowledgement.
-        scope.launch {
+        scope.launch {try {
             if(saved==null || saved.token!=token || android.os.SystemClock.elapsedRealtime()-saved.createdAt>300_000) { onResult("The original field is no longer available. Copy your text instead."); return@launch }
             repeat(20) {
                 delay(100)
+                if(graph.session.state.value!==expectedResult) {onResult("This dictation changed before insertion. Copy the current result instead.");return@launch}
                 val node=focus()
                 if(node?.packageName?.toString()==packageName || node==null) return@repeat
-                if(!eligible(node) || generation!=saved.generation || node.packageName.toString()!=saved.pkg || node.windowId!=saved.window || node.viewIdResourceName!=saved.viewId || node.hashCode()!=saved.nodeKey || node.className.toString()!=saved.klass || bounds(node)!=saved.bounds) {
+                if(!eligible(node) || generation!=saved.generation || node.packageName.toString()!=saved.pkg || node.windowId!=saved.window || node.viewIdResourceName!=saved.viewId || node!=saved.node || node.className.toString()!=saved.klass) {
                     onResult("The original field changed. Copy your text to paste it safely."); return@launch
                 }
                 val original=node.text?.toString()
@@ -103,9 +149,9 @@ class DictationAccessibilityService : AccessibilityService() {
                 return@launch
             }
             onResult("Could not return to the original field. Copy your text instead.")
-        }
+        } finally {@Suppress("DEPRECATION") saved?.node?.recycle()} }
     }
     fun currentPackage(): String? = focus()?.packageName?.toString()?.takeIf { it != packageName }
-    override fun onInterrupt() { target=null; generation++; if(::bubble.isInitialized) bubble.visible(false); graph.session.cancel() }
-    override fun onDestroy() { if(::bubble.isInitialized) bubble.destroy(); connected=null; isConnected.value=false; scope.cancel(); super.onDestroy() }
+    override fun onInterrupt() {clearTarget();generation++;if(::bubble.isInitialized) bubble.visible(false);if(::controls.isInitialized) controls.hide();graph.session.cancel()}
+    override fun onDestroy() {if(detached && graph.session.busy) graph.session.cancel();clearTarget();if(::controls.isInitialized) controls.hide();if(::bubble.isInitialized) bubble.destroy();connected=null;isConnected.value=false;scope.cancel();super.onDestroy()}
 }

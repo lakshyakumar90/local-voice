@@ -1,5 +1,7 @@
 # Android voice typing — design specification
 
+Implementation update 0.1.3 (2026-10-26): input-field recording now uses a compact visible start handoff followed by floating Stop/Cancel controls over the editor. Settings uses a topic list with focused subpages. History details occupy a full page with audio playback and vertically aligned actions. These behavior updates supersede the earlier persistent recording-dialog/history-dialog descriptions below. See `docs/PATCH_0.1.3.md`; on-device visual acceptance is still pending.
+
 Version 1, 2026-10-25. **Light mode is the user-confirmed primary theme.** The composition, tokens and concept below are proposed design decisions for review, not an implemented or device-tested Android interface. No public product name or logo has been chosen.
 
 ![Original light-first Home, Models and Recording concept](docs/design/concepts/light-first-concept.png)

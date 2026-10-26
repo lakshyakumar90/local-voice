@@ -7,6 +7,7 @@ import android.graphics.drawable.Icon as AndroidIcon
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,23 +24,41 @@ import dev.localvoice.app.AppGraph
 import dev.localvoice.app.R
 import dev.localvoice.app.data.UserSettings
 
-@Composable fun SettingsScreen(graph: AppGraph,prefs: UserSettings,connected: Boolean,revision: Int,modifier: Modifier,action: (suspend () -> Unit) -> Unit,history: () -> Unit,message: (String) -> Unit) {
+@Composable fun SettingsScreen(graph: AppGraph,prefs: UserSettings,connected: Boolean,revision: Int,modifier: Modifier,action: (suspend () -> Unit) -> Unit,history: () -> Unit,message: (String) -> Unit,initialSection: String?=null) {
     val context=LocalContext.current
     var disclosure by remember { mutableStateOf(false) }
     var audioDisclosure by remember { mutableStateOf(false) }
     var excluded by remember { mutableStateOf("") }
     var privacy by remember { mutableStateOf(false) }
     var permissionHelp by remember { mutableStateOf(false) }
+    var section by rememberSaveable(initialSection) {mutableStateOf(initialSection)}
+    BackHandler(enabled=section!=null) {section=null}
+    val scroll=rememberScrollState()
+    LaunchedEffect(section) {scroll.scrollTo(0)}
     fun open(action: String) { runCatching { context.startActivity(Intent(action)) }.onFailure { message("Open this app's settings in Android Settings.") } }
-    Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-        Text("Dictation",style=MaterialTheme.typography.titleMedium)
+    Column(modifier.verticalScroll(scroll).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+        if(section!=null) {
+            TextButton(onClick={section=null}) {Text("Back to settings")}
+            Text(when(section) {"Microphone"->"Microphone in other apps";"Storage"->"History & recordings";"Excluded"->"Excluded apps";"Privacy"->"Privacy & about";else->section.orEmpty()},style=MaterialTheme.typography.titleLarge)
+        }
+        when(section) {
+        null -> {
+            SettingRow("Dictation",prefs.language.label,Icons.Outlined.Mic) {section="Dictation"}
+            SettingRow("Appearance",prefs.theme.replaceFirstChar {it.uppercase()},Icons.Outlined.Settings) {section="Appearance"}
+            SettingRow("Microphone in other apps",if(connected && Settings.canDrawOverlays(context)) "Permissions ready" else "Set up the input-field microphone",Icons.Outlined.ChatBubbleOutline) {section="Microphone"}
+            SettingRow("History & recordings",if(prefs.retainAudio) "Text and audio saved" else if(prefs.autoHistory) "Text history on · audio off" else "Automatic saving off",Icons.Outlined.History) {section="Storage"}
+            SettingRow("Shortcuts","Launcher, keyboard and Android shortcut help",Icons.Outlined.AddToHomeScreen) {section="Shortcuts"}
+            SettingRow("Privacy & about","Permissions, local storage and licenses",Icons.Outlined.Lock) {section="Privacy"}
+        }
+        "Dictation" -> {
         LanguageChips(prefs.language) { action {check(!graph.session.busy) {"Finish dictation before changing language."};graph.settings.language(it)} }
         Text("English + Roman Hindi uses Hindi-led recognition to avoid automatic Urdu detection, then writes Hindi in English letters: मुझे कल जाना है → mujhe kal jaana hai. Use English mode for entirely English recordings. For Hindi with English words, use multilingual Whisper; try Small if Base misses words. Recognition and Roman spelling can still make mistakes.",style=MaterialTheme.typography.bodyMedium)
-        Text("Appearance",style=MaterialTheme.typography.titleMedium)
+        }
+        "Appearance" -> {
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("light","dark","system").forEach {mode -> FilterChip(selected=prefs.theme==mode,onClick={action {graph.settings.theme(mode)}},label={Text(mode.replaceFirstChar {it.uppercase()})})}}
-        HorizontalDivider()
-        Text("Cross-app dictation",style=MaterialTheme.typography.titleMedium)
-        Text("The bubble opens a small visible recording window. Local Voice only inserts into supported fields, and never sends a message.",style=MaterialTheme.typography.bodyMedium)
+        }
+        "Microphone" -> {
+        Text("Focus an input field, tap the mic, then stop when you finish. Recording controls stay over the editor and final text returns to the original field. Unsupported editors use Copy.",style=MaterialTheme.typography.bodyMedium)
         SettingRow("Display over other apps",if(Settings.canDrawOverlays(context)) "Allowed" else "Required for the bubble",Icons.Outlined.ChatBubbleOutline) {
             runCatching {context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:${context.packageName}")))}.onFailure {
                 runCatching {context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))}.onFailure {permissionHelp=true}
@@ -46,33 +66,41 @@ import dev.localvoice.app.data.UserSettings
         }
         SettingRow("Accessibility access",if(connected) "Connected" else "Read the disclosure before enabling",Icons.Outlined.AccessibilityNew) {disclosure=true}
         OutlinedButton(onClick={permissionHelp=true},modifier=Modifier.fillMaxWidth()) {Text("Permission disabled or restricted?")}
-        SwitchRow("Floating microphone",if(prefs.bubble) "Enabled when a compatible field is focused. Long press the bubble to hide it." else "Off",prefs.bubble) {enabled ->
+        SwitchRow("Input-field microphone",if(prefs.bubble) "Visible near compatible focused fields. Long press to hide." else "Off",prefs.bubble) {enabled ->
             if(enabled && (!connected || !prefs.accessibilityConsent || !Settings.canDrawOverlays(context))) message("Allow the overlay and accessibility access first.")
             else action {graph.settings.bubble(enabled)}
         }
         OutlinedButton(onClick={action {graph.settings.bubblePosition(1f,.45f)}}) {Text("Reset bubble position")}
+        SettingRow("Excluded apps","${prefs.excludedApps.size} apps excluded",Icons.Outlined.AdminPanelSettings) {section="Excluded"}
+        }
+        "Excluded" -> {
         OutlinedTextField(value=excluded,onValueChange={excluded=it},label={Text("Exclude an app package")},supportingText={Text("For example: com.example.banking. That app's fields will never show the bubble.")},modifier=Modifier.fillMaxWidth(),singleLine=true)
         TextButton(onClick={val value=excluded.trim();if(value.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+"))) action {graph.settings.exclude(value);excluded=""} else message("Enter an Android package name.")}) {Text("Add exclusion")}
         prefs.excludedApps.sorted().forEach { pkg -> Row(verticalAlignment=Alignment.CenterVertically) {Text(pkg,Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium);TextButton(onClick={action {graph.settings.include(pkg)}}) {Text("Remove")}} }
+        }
+        "Storage" -> {
+        SettingRow("Open history","Read transcripts and listen to saved recordings",Icons.Outlined.History,history)
         HorizontalDivider()
-        Text("History and recordings",style=MaterialTheme.typography.titleMedium)
-        SwitchRow("Save transcript history","Encrypted on this phone. Automatically deleted after seven days. Manual Save remains available when this is off.",prefs.autoHistory) {action {graph.settings.history(it)}}
-        SwitchRow("Keep recording audio","Off by default. Optional encrypted recordings are saved with history and can be exported as WAV.",prefs.retainAudio) {if(it) audioDisclosure=true else action {graph.settings.audio(false)}}
-        SettingRow("Saved transcripts","Copy, export or delete your local text and recordings",Icons.Outlined.History,history)
-        HorizontalDivider()
+        SwitchRow("Save new transcripts automatically","Encrypted on this phone. Items older than seven days are removed when the app starts.",prefs.autoHistory) {action {graph.settings.history(it)}}
+        SwitchRow("Keep recordings with history","Save encrypted audio for playback and WAV export. This applies to future dictations.",prefs.retainAudio) {if(it) audioDisclosure=true else action {graph.settings.audio(false)}}
+        Text("Existing text-only entries do not contain audio. Manual Save remains available when automatic history is off.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        "Shortcuts" -> {
         Text("If Android shows a separate Accessibility shortcut button on the edge of the screen: open Android Accessibility settings → Local Voice and switch off only Local Voice shortcut / Accessibility button. Keep Use Local Voice enabled for the input-field microphone. This system shortcut is managed by Android, not by the app.",style=MaterialTheme.typography.bodyMedium)
         TextButton(onClick={open(Settings.ACTION_ACCESSIBILITY_SETTINGS)}) {Text("Manage Android accessibility shortcut")}
-        Text("Shortcuts",style=MaterialTheme.typography.titleMedium)
         SettingRow("Add dictation shortcut","Launcher shortcut. Quick Settings tile can also be added from the system tile editor.",Icons.Outlined.AddToHomeScreen) {
             val shortcuts=context.getSystemService(ShortcutManager::class.java)
             if(shortcuts.isRequestPinShortcutSupported) shortcuts.requestPinShortcut(ShortcutInfo.Builder(context,"pinned-dictate").setShortLabel("Dictate locally").setIcon(AndroidIcon.createWithResource(context,R.drawable.ic_mic)).setIntent(Intent(context,MainActivity::class.java).setAction("dev.localvoice.DICTATE")).build(),null)
             else message("Long press the app icon to use its Dictate locally shortcut.")
         }
         Text("With a physical keyboard: Ctrl + Shift + Space while this app is open. Global keyboard interception is not enabled.",style=MaterialTheme.typography.bodyMedium)
-        HorizontalDivider()
+        }
+        "Privacy" -> {
         SettingRow("Android app permissions","Microphone and notification access",Icons.Outlined.AdminPanelSettings) {context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:${context.packageName}")))}
         SettingRow("Privacy and open-source notices","Local processing, downloads, retention and licenses",Icons.Outlined.Lock) {privacy=true}
         Text("Local Voice · development build\nNo account, ads, transcript analytics or cloud recognition.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        }
         Spacer(Modifier.height(20.dp))
     }
     if(permissionHelp) AlertDialog(onDismissRequest={permissionHelp=false},title={Text("Android restricted settings")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {

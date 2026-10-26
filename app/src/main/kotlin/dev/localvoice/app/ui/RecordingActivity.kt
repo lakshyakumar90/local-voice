@@ -45,6 +45,8 @@ import kotlinx.coroutines.withContext
 class RecordingActivity : ComponentActivity() {
     private var attempted=false
     private var leavingForDelivery=false
+    private var leavingForOverlay=false
+    private var overlayHandoffFailed by mutableStateOf(false)
     private var exportText=""
     private val microphone=registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if(granted) startWhenVisible() else graph.session.fail("Microphone permission is needed to record. Allow it in Android Settings, then retry.")
@@ -61,6 +63,11 @@ class RecordingActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if(intent.getStringExtra("overlayFlow")!=null) {
+            window.setGravity(android.view.Gravity.BOTTOM)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            window.attributes=window.attributes.apply {dimAmount=0f}
+        }
         attempted=savedInstanceState?.getBoolean("attempted") ?: false
         setContent {
             val prefs by graph.preferences.collectAsStateWithLifecycle()
@@ -68,16 +75,29 @@ class RecordingActivity : ComponentActivity() {
             var confirmCancel by remember {mutableStateOf(false)}
             LocalVoiceTheme(prefs.theme) {
                 BackHandler(enabled=graph.session.busy) {confirmCancel=true}
-                RecordingContent(state,graph.catalog.find(prefs.modelId)?.name.orEmpty(),prefs.language.label,
+                if(intent.getStringExtra("overlayFlow")!=null && !overlayHandoffFailed && state.phase in listOf(SessionPhase.IDLE,SessionPhase.PREPARING,SessionPhase.RECORDING)) {
+                    Surface(shape=androidx.compose.foundation.shape.RoundedCornerShape(20.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                            Text(if(state.phase==SessionPhase.RECORDING) "Returning to your editor…" else "Starting microphone…",style=MaterialTheme.typography.titleMedium)
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                            TextButton(onClick={graph.session.cancel();finish()}) {Text("Cancel")}
+                        }
+                    }
+                } else RecordingContent(state,graph.catalog.find(prefs.modelId)?.name.orEmpty(),prefs.language.label,
                     stop={graph.session.stop()},cancel={graph.session.cancel();finish()},
-                    retry={graph.session.reset();attempted=false;requestStart()},
+                    retry={graph.session.reset();intent.removeExtra("showResult");intent.removeExtra("overlayFlow");intent.removeExtra("target");attempted=false;requestStart()},
                     copy={runCatching {copyPrivate(this,state.transcript)}.onSuccess {graph.session.resultMessage("Copied. Paste your text into the field you choose.")}.onFailure {graph.session.resultMessage("Clipboard unavailable. Try Export instead.")}},
                     save={lifecycleScope.launch {runCatching {graph.session.saveResult()}.onFailure {graph.session.resultMessage("Could not save history. Copy or export the text before closing.")}}},
                     export={exportText=state.transcript;export.launch("local-transcript-${System.currentTimeMillis()}.txt")},
                     done={graph.session.reset();finish()},settings={startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$packageName")))})
                 if(confirmCancel) AlertDialog(onDismissRequest={confirmCancel=false},title={Text("Cancel dictation?")},text={Text("Unsaved recording and transcription work will be discarded.")},confirmButton={TextButton(onClick={graph.session.cancel();finish()}) {Text("Discard")}},dismissButton={TextButton(onClick={confirmCancel=false}) {Text("Keep going")}})
                 LaunchedEffect(state.phase) {
-                    if(state.phase==SessionPhase.RESULT && intent.getStringExtra("target")!=null && !intent.getBooleanExtra("showResult",false) && !leavingForDelivery) {
+                    val flow=intent.getStringExtra("overlayFlow")
+                    if(state.phase==SessionPhase.RECORDING && flow!=null && !leavingForOverlay) {
+                        if(DictationAccessibilityService.connected?.detachRecording(flow)==true) {leavingForOverlay=true;finish()}
+                        else overlayHandoffFailed=true
+                    }
+                    if(state.phase==SessionPhase.RESULT && (flow==null || overlayHandoffFailed) && intent.getStringExtra("target")!=null && !intent.getBooleanExtra("showResult",false) && !leavingForDelivery) {
                         val token=intent.getStringExtra("target")!!
                         val service=DictationAccessibilityService.connected
                         if(service!=null) {
@@ -123,9 +143,9 @@ class RecordingActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {outState.putBoolean("attempted",attempted);super.onSaveInstanceState(outState)}
     override fun onStop() {
         super.onStop()
-        if(!isChangingConfigurations && !leavingForDelivery && graph.session.state.value.phase==SessionPhase.PROCESSING) graph.session.cancel()
+        if(!isChangingConfigurations && !leavingForDelivery && !leavingForOverlay && graph.session.state.value.phase==SessionPhase.PROCESSING) graph.session.cancel()
     }
-    override fun onDestroy() {if(isFinishing && !leavingForDelivery && graph.session.busy) graph.session.cancel();super.onDestroy()}
+    override fun onDestroy() {if(isFinishing && !leavingForDelivery && !leavingForOverlay && graph.session.busy) graph.session.cancel();super.onDestroy()}
 }
 
 @Composable private fun RecordingContent(state: SessionState,model: String,language: String,stop: () -> Unit,cancel: () -> Unit,retry: () -> Unit,copy: () -> Unit,save: () -> Unit,export: () -> Unit,done: () -> Unit,settings: () -> Unit) {
@@ -159,7 +179,8 @@ class RecordingActivity : ComponentActivity() {
                     if(state.message.isNotBlank()) Text(state.message,style=MaterialTheme.typography.bodyMedium)
                     SelectionContainer {Text(state.transcript,style=MaterialTheme.typography.bodyLarge)}
                     Button(onClick=copy,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {Icon(Icons.Outlined.ContentCopy,null);Spacer(Modifier.width(8.dp));Text("Copy text")}
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {OutlinedButton(onClick=save,enabled=state.savedId==null) {Icon(Icons.Outlined.Save,null);Spacer(Modifier.width(8.dp));Text(if(state.savedId==null) "Save" else "Saved")};OutlinedButton(onClick=export) {Text("Export text")}}
+                    OutlinedButton(onClick=save,enabled=state.savedId==null,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Icon(Icons.Outlined.Save,null);Spacer(Modifier.width(8.dp));Text(if(state.savedId==null) "Save transcript" else "Saved")}
+                    OutlinedButton(onClick=export,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) {Text("Export text")}
                     Text("Unsaved text is held in memory for up to five minutes. Use Save to keep it locally, or export it to a file.",style=MaterialTheme.typography.bodySmall,color=colors.onSurfaceVariant)
                     TextButton(onClick=done,modifier=Modifier.fillMaxWidth()) {Text("Done")}
                 }

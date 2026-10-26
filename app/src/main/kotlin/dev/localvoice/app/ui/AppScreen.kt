@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,6 +60,9 @@ import java.util.Date
     val history by graph.history.entries.collectAsStateWithLifecycle(initialValue=emptyList())
     val scope=rememberCoroutineScope()
     var screen by rememberSaveable { mutableStateOf("Home") }
+    var historySelection by rememberSaveable {mutableStateOf<String?>(null)}
+    var settingsStart by remember {mutableStateOf<String?>(null)}
+    BackHandler(enabled=screen=="History" && historySelection==null) {screen="Settings"}
     var revision by remember { mutableIntStateOf(0) }
     var message by remember { mutableStateOf<String?>(null) }
     val snack=remember { SnackbarHostState() }
@@ -77,7 +81,7 @@ import java.util.Date
         Row {
             if(wide) NavigationRail { Spacer(Modifier.height(24.dp)); destinations.forEach { (label,icon) -> NavigationRailItem(selected=screen==label || screen=="History" && label=="Settings",onClick={screen=label},icon={Icon(icon,label)},label={Text(label)}) } }
             Scaffold(modifier=Modifier.weight(1f),containerColor=MaterialTheme.colorScheme.background,
-                topBar={ TopAppBar(title={Text(if(screen=="Home") "Voice typing" else screen)},navigationIcon={if(screen=="History") IconButton(onClick={screen="Settings"}) {Icon(Icons.AutoMirrored.Outlined.ArrowBack,"Back")}}) },
+                topBar={ TopAppBar(title={Text(if(screen=="Home") "Voice typing" else if(screen=="History" && historySelection!=null) "Transcript" else screen)},navigationIcon={if(screen=="History") IconButton(onClick={if(historySelection!=null) historySelection=null else screen="Settings"}) {Icon(Icons.AutoMirrored.Outlined.ArrowBack,"Back")}}) },
                 snackbarHost={SnackbarHost(snack)},
                 bottomBar={if(!wide) NavigationBar {destinations.forEach { (label,icon) -> NavigationBarItem(selected=screen==label || screen=="History" && label=="Settings",onClick={screen=label},icon={Icon(icon,label)},label={Text(label)})}} },
             ) { padding ->
@@ -85,8 +89,8 @@ import java.util.Date
                 when(screen) {
                     "Home" -> HomeScreen(graph,prefs,installed,connected,body,record,{screen="Models"},{screen="Settings"},{screen="History"})
                     "Models" -> ModelScreen(graph,prefs,jobs,installed,body,action,{message=it})
-                    "History" -> HistoryScreen(graph,history,body,action,{message=it})
-                    else -> SettingsScreen(graph,prefs,connected,revision,body,action,{screen="History"},{message=it})
+                    "History" -> HistoryScreen(graph,history,body,action,{message=it},historySelection,{historySelection=it},{settingsStart="Storage";screen="Settings"})
+                    else -> SettingsScreen(graph,prefs,connected,revision,body,action,{historySelection=null;screen="History"},{message=it},settingsStart)
                 }
             }
         }

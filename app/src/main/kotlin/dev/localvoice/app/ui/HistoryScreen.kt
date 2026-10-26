@@ -32,9 +32,9 @@ fun copyPrivate(context: Context,text: String) {
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
 }
 
-@Composable fun HistoryScreen(graph: AppGraph,entries: List<HistoryEntry>,modifier: Modifier,action: (suspend () -> Unit) -> Unit,message: (String) -> Unit) {
+@Composable fun HistoryScreen(graph: AppGraph,entries: List<HistoryEntry>,modifier: Modifier,action: (suspend () -> Unit) -> Unit,message: (String) -> Unit,selectedId: String?,onSelect: (String?) -> Unit,recordingSettings: () -> Unit) {
     val context=LocalContext.current
-    var selected by remember { mutableStateOf<HistoryEntry?>(null) }
+    val selected=entries.firstOrNull {it.id==selectedId}
     var clear by remember { mutableStateOf(false) }
     var exportEntry by remember { mutableStateOf<HistoryEntry?>(null) }
     val textExport=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) {uri ->
@@ -47,27 +47,27 @@ fun copyPrivate(context: Context,text: String) {
         if(uri!=null && entry!=null) action {withContext(Dispatchers.IO) {val audio=graph.history.audio(entry) ?: error("No recording is saved for this transcript.");try {context.contentResolver.openOutputStream(uri)?.use {it.write(audio)} ?: error("Could not open the export file.")} finally {audio.fill(0)}};message("Recording exported")}
         exportEntry=null
     }
-    LazyColumn(modifier,contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+    if(selected==null) LazyColumn(modifier,contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         item {Text("Saved only on this phone",style=MaterialTheme.typography.titleLarge);Text("Encrypted text and optional recordings. Items expire after seven days; export anything you want to keep.",style=MaterialTheme.typography.bodyMedium)}
         if(entries.isEmpty()) item {Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {Icon(Icons.Outlined.History,null,Modifier.size(40.dp));Text("Your saved words will appear here",style=MaterialTheme.typography.titleMedium);Text("Use Save after dictation, or enable automatic history in Settings. Nothing is saved until you choose.")}}
         items(entries,key={it.id}) {entry ->
             val text by produceState<String?>(null,entry.id) {value=runCatching {graph.history.text(entry)}.getOrElse {"This encrypted entry could not be opened. Delete it if the device key was reset."}}
-            Surface(shape=androidx.compose.foundation.shape.RoundedCornerShape(16.dp),color=MaterialTheme.colorScheme.surfaceContainerLow,onClick={selected=entry}) {
+            Surface(shape=androidx.compose.foundation.shape.RoundedCornerShape(16.dp),color=MaterialTheme.colorScheme.surfaceContainerLow,onClick={onSelect(entry.id)}) {
                 Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Text(text ?: "Opening encrypted transcript…",maxLines=3,overflow=TextOverflow.Ellipsis)
-                    Text("${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(entry.createdAt))}\n${entry.modelName} · ${entry.language}${if(entry.audioFile!=null) " · Audio saved" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(entry.createdAt))}\n${entry.modelName} · ${entry.language}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if(entry.audioFile!=null) "Recording · ${playbackTime(entry.durationMs.toInt())}" else "Text only",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
                 }
             }
         }
         if(entries.isNotEmpty()) item {TextButton(onClick={clear=true}) {Icon(Icons.Outlined.DeleteOutline,null);Spacer(Modifier.width(8.dp));Text("Delete all history")}}
     }
     selected?.let {entry ->
-        val text by produceState<String?>(null,entry.id) {value=runCatching {graph.history.text(entry)}.getOrNull()}
-        AlertDialog(onDismissRequest={selected=null},title={Text("Saved transcript")},text={SelectionContainer {Text(text ?: "This entry cannot be decrypted. You can delete it.")}},confirmButton={Column {
-            Row {TextButton(onClick={text?.let {copyPrivate(context,it);message("Copied")}},enabled=text!=null) {Text("Copy")};TextButton(onClick={exportEntry=entry;textExport.launch("transcript-${entry.id.take(8)}.txt")},enabled=text!=null) {Text("Export text")}}
-            if(entry.audioFile!=null) TextButton(onClick={exportEntry=entry;audioExport.launch("recording-${entry.id.take(8)}.wav")}) {Text("Export recording")}
-            TextButton(onClick={selected=null}) {Text("Done")}
-        }},dismissButton={TextButton(onClick={action {graph.history.delete(entry);selected=null}}) {Text("Delete")}})
+        TranscriptDetail(graph,entry,modifier,{onSelect(null)},recordingSettings,
+            copy={text -> runCatching {copyPrivate(context,text)}.onSuccess {message("Copied")}.onFailure {message("Clipboard unavailable. Try Export text.")}},
+            exportText={exportEntry=entry;textExport.launch("transcript-${entry.id.take(8)}.txt")},
+            exportAudio={exportEntry=entry;audioExport.launch("recording-${entry.id.take(8)}.wav")},
+            delete={action {graph.history.delete(entry);onSelect(null)}})
     }
     if(clear) AlertDialog(onDismissRequest={clear=false},title={Text("Delete all saved history?")},text={Text("All encrypted transcripts and recordings in this app will be removed. Files you previously exported are not deleted.")},confirmButton={TextButton(onClick={action {graph.history.clear();clear=false}}) {Text("Delete all")}},dismissButton={TextButton(onClick={clear=false}) {Text("Keep history")}})
 }

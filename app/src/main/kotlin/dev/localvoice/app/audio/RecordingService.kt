@@ -10,6 +10,8 @@ import dev.localvoice.app.R
 import dev.localvoice.app.graph
 import dev.localvoice.app.ui.RecordingActivity
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import dev.localvoice.core.SessionPhase
 
 class RecordingService : Service() {
     companion object { const val START="start"; const val STOP="stop"; const val CANCEL="cancel"; private const val ID=41 }
@@ -20,7 +22,7 @@ class RecordingService : Service() {
     private val screenReceiver=object : BroadcastReceiver() { override fun onReceive(context: Context?,intent: Intent?) { graph.session.cancel() } }
     override fun onCreate() {
         super.onCreate(); recorder=LocalRecorder(this)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("recording","Active recording",NotificationManager.IMPORTANCE_LOW))
+        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("recording","Local dictation",NotificationManager.IMPORTANCE_LOW))
         registerReceiver(screenReceiver,IntentFilter(Intent.ACTION_SCREEN_OFF))
     }
     override fun onBind(intent: Intent?): IBinder? = null
@@ -45,13 +47,26 @@ class RecordingService : Service() {
         if(!capturing || stopping) return
         stopping=true
         scope.launch {
-            try { val clip=recorder.stop(); capturing=false; ServiceCompat.stopForeground(this@RecordingService,ServiceCompat.STOP_FOREGROUND_REMOVE); graph.session.process(clip) }
-            catch(e: Exception) { graph.session.fail(e.message ?: "Recording was interrupted.") }
-            finally { stopSelf() }
+            var captured: dev.localvoice.core.AudioClip?=null
+            try {
+                val clip=recorder.stop();captured=clip;capturing=false
+                val cancel=PendingIntent.getService(this@RecordingService,2,Intent(this@RecordingService,RecordingService::class.java).setAction(CANCEL),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                val notification=NotificationCompat.Builder(this@RecordingService,"recording").setSmallIcon(R.drawable.ic_mic)
+                    .setContentTitle("Transcribing on this phone").setContentText("Microphone stopped · processing locally").setOngoing(true)
+                    .addAction(0,"Cancel",cancel).build()
+                // Android's dataSync type includes local file processing; capture is already stopped.
+                ServiceCompat.startForeground(this@RecordingService,ID,notification,if(android.os.Build.VERSION.SDK_INT>=29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0)
+                graph.session.process(clip)
+                graph.session.state.first {it.phase!=SessionPhase.PROCESSING}
+            }
+            catch(_: CancellationException) { /* The user's Cancel owns the state transition. */ }
+            catch(e: Exception) {captured?.pcm?.fill(0f);graph.session.fail(e.message ?: "Recording was interrupted.")}
+            finally {ServiceCompat.stopForeground(this@RecordingService,ServiceCompat.STOP_FOREGROUND_REMOVE);stopSelf()}
         }
     }
     override fun onDestroy() {
         runCatching { unregisterReceiver(screenReceiver) }
+        if(capturing && !stopping || stopping && graph.session.state.value.phase==SessionPhase.PROCESSING) graph.session.cancel()
         if(capturing && !stopping) graph.scope.launch { recorder.stop(discard=true) }
         ServiceCompat.stopForeground(this,ServiceCompat.STOP_FOREGROUND_REMOVE)
         scope.cancel(); super.onDestroy()
