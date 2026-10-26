@@ -4,6 +4,45 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DictationFormatterTest {
+    @Test fun naturalFeatureRequestBecomesBulletsWithoutSpokenListCommands() {
+        assertEquals("I want these features:\n• UI\n• Front end\n• Back end\n• Database.",DictationFormatter.format("I want these features: UI, front end, back end, database."))
+        assertEquals("I want these features:\n• UI\n• Front end\n• Back end\n• Database",DictationFormatter.format("I want these features UI, front end, back end, database"))
+    }
+    @Test fun naturalListSupportsFinalConjunctionAndOxfordComma() {
+        val expected="I need these features:\n• UI\n• Front end\n• Back end\n• Database."
+        assertEquals(expected,DictationFormatter.format("I need these features: UI, front end, back end and database."))
+        assertEquals(expected,DictationFormatter.format("I need these features: UI, front end, back end, and database."))
+    }
+    @Test fun listEndsBeforeFollowingProse() {
+        assertEquals("Features:\n• UI\n• Front end\n• Database.\n\nPlease ship it tomorrow.",DictationFormatter.format("Features: UI, front end, database. Please ship it tomorrow."))
+    }
+    @Test fun commaProseWithoutListIntentStaysProse() {
+        val text="I worked on UI, front end, back end, and database yesterday."
+        assertEquals(text,DictationFormatter.format(text))
+        assertEquals("These features are useful, important, and fast.",DictationFormatter.format("These features are useful, important, and fast."))
+    }
+    @Test fun listPreservesNestedCommasQuotesAndCompoundItems() {
+        assertEquals("Features:\n• UI\n• Billing (monthly, yearly)\n• Research and development.",DictationFormatter.format("Features: UI, billing (monthly, yearly), research and development."))
+        assertEquals("Options:\n• \"red, green\"\n• Blue\n• Black.",DictationFormatter.format("Options: \"red, green\", blue, black."))
+    }
+    @Test fun listPreservesThousandsSeparatorsAndTechnicalNames() {
+        assertEquals("Requirements:\n• 1,000 MB RAM\n• SSD storage\n• PostgreSQL.",DictationFormatter.format("Requirements: 1,000 MB RAM, SSD storage, PostgreSQL."))
+        assertEquals("Features:\n• Node.js\n• Next.js\n• Database.",DictationFormatter.format("Features: Node.js, Next.js, database."))
+    }
+    @Test fun hindiFeatureListsKeepTheirLanguage() {
+        val input="मुझे ये फीचर्स चाहिए: UI, फ्रंट एंड, बैक एंड, डेटाबेस।"
+        val hindi=DictationOutput.finish(input,LanguageMode.HINDI,FormattingMode.SMART)
+        assertEquals("मुझे ये फीचर्स चाहिए:\n• UI\n• फ्रंट एंड\n• बैक एंड\n• डेटाबेस।",hindi)
+        val roman=DictationOutput.finish(input,LanguageMode.MIXED,FormattingMode.SMART)
+        assertTrue(roman.contains("\n• UI\n"))
+        assertFalse(roman.any {it in '\u0900'..'\u097f'})
+    }
+    @Test fun naturalListsAreIdempotentAndOriginalModeDoesNotReformat() {
+        val raw="I want these features: UI, front end, back end, database."
+        val formatted=DictationFormatter.format(raw)
+        assertEquals(formatted,DictationFormatter.format(formatted))
+        assertEquals(raw,DictationFormatter.format(raw,FormattingMode.VERBATIM))
+    }
     @Test fun spokenParagraphAndLineBreaks() {
         assertEquals("Hello.\n\nThis is a new thought.\nCall tomorrow.",DictationFormatter.format("Hello. New paragraph. This is a new thought. Next line. Call tomorrow."))
     }

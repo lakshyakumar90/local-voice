@@ -23,6 +23,11 @@ object DictationFormatter {
     )
     private val listMarker=Regex("(?<![\\p{L}\\p{N}_])(?:${markers.joinToString("|")})(?![\\p{L}\\p{N}_])[,):.।]?\\s+",flags)
     private val bullet=Regex("(?<![\\p{L}\\p{N}_])(?:bullet point|next bullet|बुलेट पॉइंट|अगला बुलेट)(?![\\p{L}\\p{N}_])[,.:।]?\\s*",flags)
+    private const val listNouns="features|requirements|tasks|items|options|steps|goals|priorities|ingredients|groceries|shopping list|packing list|to-do list|todo list|फीचर्स|विशेषताएँ|सुविधाएँ|ज़रूरतें|जरूरतें|काम|चीज़ें|चीजें|विकल्प|सूची"
+    private val titledList=Regex("^(.{0,200}?(?:\\b(?:$listNouns)(?:\\s+(?:are|include|चाहिए|हैं))?|(?:I|we) (?:want|need) (?:these|the following)|मुझे (?:ये|यह|निम्नलिखित)(?: चाहिए)?))\\s*:\\s*(.+)$",flags)
+    private val requestedList=Regex("^((?:(?:I|we)\\s+(?:want|need|would like)|(?:please\\s+)?(?:add|include)).{0,100}?\\b(?:$listNouns))\\s*(?:[:,]|\\b(?:including|like|such as|are|namely)\\b)?\\s+(.+)$",flags)
+    private val lastConjunction=Regex("\\s+(?:and|और|aur)\\s+",flags)
+    private val compoundItems=setOf("research and development","terms and conditions","salt and pepper","bread and butter","health and safety","sales and marketing","trial and error")
 
     fun format(input: String,mode: FormattingMode=FormattingMode.SMART): String {
         if(mode==FormattingMode.VERBATIM || input.isBlank()) return TranscriptText.normalize(input)
@@ -74,7 +79,50 @@ object DictationFormatter {
             val ordinaryOrdinal=Regex("^(?:time|times|year|years|day|days|moment|minute|minutes|hour|hours|of|floor|class|place|child|name|बार|साल|दिन)(?![\\p{L}\\p{N}_])",flags)
             if(items.all {it.isNotBlank() && !ordinaryOrdinal.containsMatchIn(it)}) return (listOf(intro).filter(String::isNotBlank)+items.mapIndexed {index,item -> "${index+1}. ${capital(item)}"}).joinToString("\n")
         }
-        return block
+        return naturalList(block) ?: block
+    }
+
+    private fun naturalList(block: String): String? {
+        if(block.contains('\n')) return null
+        val match=titledList.matchEntire(block) ?: requestedList.matchEntire(block) ?: return null
+        val intro=match.groupValues[1].trim().trimEnd(':',',')+":"
+        val body=match.groupValues[2].trim()
+        val sentences=BreakIterator.getSentenceInstance(Locale.ROOT).apply {setText(body)}
+        sentences.first()
+        val end=sentences.next().let {if(it==BreakIterator.DONE) body.length else it}
+        val enumeration=body.substring(0,end).trim()
+        val tail=body.substring(end).trim()
+        // Split at top-level delimiters only; keep parentheses, protected quotes and 1,000 intact.
+        val items=mutableListOf<String>();var start=0
+        val stack=mutableListOf<Char>()
+        enumeration.forEachIndexed {index,c ->
+            when(c) {
+                '(','[','{' -> stack+=c
+                ')',']','}' -> {
+                    val expected=when(c) {')'->'(';']'->'[';else->'{'}
+                    if(stack.lastOrNull()!=expected) return null
+                    stack.removeAt(stack.lastIndex)
+                }
+                ',', ';' -> if(stack.isEmpty() && !(c==',' && enumeration.getOrNull(index-1)?.isDigit()==true && enumeration.getOrNull(index+1)?.isDigit()==true)) {
+                    items+=enumeration.substring(start,index).trim();start=index+1
+                }
+            }
+        }
+        if(stack.isNotEmpty()) return null
+        items+=enumeration.substring(start).trim()
+        val last=items.last()
+        val withoutAnd=last.replace(Regex("^(?:and|और|aur)\\s+",flags),"")
+        if(withoutAnd!=last) items[items.lastIndex]=withoutAnd
+        else if(last.trimEnd('.','।').lowercase(Locale.ROOT) !in compoundItems && last.none {it in "()[]{}"}) {
+            val conjunction=lastConjunction.findAll(last).lastOrNull()
+            if(conjunction!=null) {
+                items[items.lastIndex]=last.substring(0,conjunction.range.first).trim()
+                items+=last.substring(conjunction.range.last+1).trim()
+            }
+        }
+        // Short noun/task items only. Don't reinterpret a paragraph with several clauses as a list.
+        if(items.size !in 2..20 || items.any {it.isBlank() || it.length>120 || it.split(Regex("\\s+")).size>12}) return null
+        return intro+"\n"+items.joinToString("\n") {"• ${capital(it)}"}+if(tail.isNotEmpty()) "\n\n$tail" else ""
     }
 
     private fun clean(input: String): String {

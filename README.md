@@ -16,6 +16,8 @@ Recording is explicit and limited to ten minutes. In-app entry points use a reco
 
 **Settings → Dictation → Smart formatting** adds local numbered/bulleted lists, paragraph breaks, spoken punctuation, light filler cleanup and restricted numeric corrections. Say “first… second…”, “bullet point”, “new paragraph” or “new line”; supported Hindi commands work before Roman conversion. Long prose is grouped into readable paragraphs. Choose **Original wording** to bypass formatting. This is a local rule-based layer, not a generative rewrite model. See `docs/WISPR_FLOW_FORMATTING_RESEARCH.md` for research, examples and boundaries, and `docs/PATCH_0.1.5.md` for tests.
 
+Version 0.1.6 also recognizes natural requests such as “I want these features: UI, front end, back end, database” as a bulleted list. The floating mic uses audio-responsive listening dots above its timer. See `docs/PATCH_0.1.6.md`.
+
 ## Local models
 
 | Choice | Purpose | Download |

@@ -19,19 +19,25 @@ class RecordingOverlay(private val context: Context,stop: () -> Unit,cancel: () 
     private fun dp(value: Int)=(value*density).toInt()
     private var attached=false
     private var phase=SessionPhase.IDLE
-    private val label=TextView(context).apply {textSize=14f;setTypeface(typeface,Typeface.BOLD);setPadding(dp(12),0,dp(12),0);gravity=Gravity.CENTER_VERTICAL;minHeight=dp(56)}
+    private val label=TextView(context).apply {textSize=14f;setTypeface(typeface,Typeface.BOLD);gravity=Gravity.CENTER_VERTICAL}
+    private val dots=ListeningDotsView(context)
+    private val status=LinearLayout(context).apply {
+        orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(56);setPadding(dp(12),dp(4),dp(12),dp(4))
+        addView(dots,LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(24)))
+        addView(label,LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
     private val stopButton=Button(context).apply {text="Stop";isAllCaps=false;minimumWidth=dp(56);minimumHeight=dp(48);setOnClickListener {if(phase==SessionPhase.RESULT) copy() else stop()};contentDescription="Stop recording and insert text"}
     private val cancelButton=Button(context).apply {text="Cancel";isAllCaps=false;minimumWidth=dp(64);minimumHeight=dp(48);setOnClickListener {cancel()}}
     private val bar=LinearLayout(context).apply {
         orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(dp(4),dp(4),dp(8),dp(4))
-        addView(label,LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1f));addView(stopButton);addView(cancelButton);elevation=dp(4).toFloat()
+        addView(status,LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1f));addView(stopButton);addView(cancelButton);elevation=dp(4).toFloat()
     }
     private val params=WindowManager.LayoutParams(dp(320).coerceAtMost(context.resources.displayMetrics.widthPixels-dp(16)),WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT).apply {gravity=Gravity.TOP or Gravity.START}
     init {installDrag()}
     @SuppressLint("ClickableViewAccessibility") // Drag-only label; actual actions use native accessible buttons.
     private fun installDrag() {
         var x=0f;var y=0f;var baseX=0;var baseY=0
-        label.setOnTouchListener {_,event ->
+        status.setOnTouchListener {_,event ->
             when(event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {x=event.rawX;y=event.rawY;baseX=params.x;baseY=params.y;true}
                 MotionEvent.ACTION_MOVE -> {
@@ -56,9 +62,14 @@ class RecordingOverlay(private val context: Context,stop: () -> Unit,cancel: () 
         cancelButton.setTextColor(foreground)
         bar.background=GradientDrawable().apply {cornerRadius=dp(16).toFloat();setColor(if(dark) Color.rgb(33,48,41) else Color.rgb(238,244,241))}
         phase=state.phase
+        val recording=phase==SessionPhase.RECORDING
+        dots.visibility=if(recording) View.VISIBLE else View.GONE
+        dots.update(state.level,recording,if(dark) Color.rgb(130,216,192) else Color.rgb(0,107,93))
+        label.textSize=if(recording) 12f else 14f
+        label.contentDescription=if(recording) "Recording audio. ${playTime(state.elapsedMs)} of 10 minutes." else null
         label.text=when(phase) {
             SessionPhase.PREPARING -> "Starting microphone…"
-            SessionPhase.RECORDING -> "Recording\n${playTime(state.elapsedMs)} / 10:00"
+            SessionPhase.RECORDING -> "${playTime(state.elapsedMs)} / 10:00"
             SessionPhase.RESULT -> state.message.ifBlank {"Couldn’t insert text. Copy to paste."}
             SessionPhase.ERROR -> state.message
             else -> "Transcribing…"
@@ -75,6 +86,6 @@ class RecordingOverlay(private val context: Context,stop: () -> Unit,cancel: () 
         }
         return attached
     }
-    fun hide() {if(attached) runCatching {wm.removeView(bar)};attached=false}
+    fun hide() {dots.update(0f,false,Color.TRANSPARENT);if(attached) runCatching {wm.removeView(bar)};attached=false}
     private fun playTime(ms: Long)="%d:%02d".format(ms/60_000,ms/1000%60)
 }
