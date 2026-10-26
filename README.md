@@ -18,6 +18,8 @@ Recording is explicit and limited to ten minutes. In-app entry points use a reco
 
 Version 0.1.6 also recognizes natural requests such as “I want these features: UI, front end, back end, database” as a bulleted list. The floating mic uses audio-responsive listening dots above its timer. See `docs/PATCH_0.1.6.md`.
 
+Version 0.1.7 fixes first dictation into empty input fields, including missing cursor metadata and visible placeholders. See `docs/PATCH_0.1.7.md`.
+
 ## Local models
 
 | Choice | Purpose | Download |

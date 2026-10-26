@@ -12,6 +12,7 @@ import android.text.Spanned
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import dev.localvoice.app.graph
+import dev.localvoice.core.EditableFieldSnapshot
 import dev.localvoice.core.TextInsertion
 import dev.localvoice.core.SessionPhase
 import dev.localvoice.core.RecordingLimits
@@ -126,11 +127,12 @@ class DictationAccessibilityService : AccessibilityService() {
         if(!eligible(node)) { updateBubble(); return }
         clearTarget();overlayFlow=null;detached=false;overlayStarted=false;feedback=false
         graph.session.reset() // A new mic gesture must not reopen an earlier result/error.
-        val n=node!!; val text=n.text?.toString().orEmpty()
+        val n=node!!
+        val field=EditableFieldSnapshot.capture(n.text?.toString(),n.textSelectionStart,n.textSelectionEnd,n.isShowingHintText)
         lastExternal="${n.packageName}:${n.windowId}:${n.viewIdResourceName}:${n.hashCode()}"
         val salt=UUID.randomUUID().toString(); val token=UUID.randomUUID().toString()
         clearTarget()
-        target=if(n.textSelectionStart>=0 && n.textSelectionEnd>=n.textSelectionStart) Target(token,n.packageName.toString(),n.windowId,n.viewIdResourceName,AccessibilityNodeInfo.obtain(n),n.className.toString(),digest(text,salt),salt,n.textSelectionStart,n.textSelectionEnd,generation) else null
+        target=field?.let { Target(token,n.packageName.toString(),n.windowId,n.viewIdResourceName,AccessibilityNodeInfo.obtain(n),n.className.toString(),digest(it.text,salt),salt,it.start,it.end,generation) }
         overlayFlow=token;detached=true
         targetExpiry=scope.launch {delay(RecordingLimits.TARGET_LIFETIME_MS);if(target?.token==token) clearTarget()}
         if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
@@ -163,8 +165,9 @@ class DictationAccessibilityService : AccessibilityService() {
                 if(!eligible(node) || generation!=saved.generation || node.packageName.toString()!=saved.pkg || node.windowId!=saved.window || node.viewIdResourceName!=saved.viewId || node!=saved.node || node.className.toString()!=saved.klass) {
                     onResult("The original field changed. Copy your text to paste it safely."); return@launch
                 }
-                val original=node.text?.toString().orEmpty()
-                if(!digest(original,saved.salt).contentEquals(saved.digest) || node.textSelectionStart!=saved.start || node.textSelectionEnd!=saved.end) { onResult("The field's text or selection changed. Copy your text instead."); return@launch }
+                val field=EditableFieldSnapshot.capture(node.text?.toString(),node.textSelectionStart,node.textSelectionEnd,node.isShowingHintText)
+                if(field==null || !digest(field.text,saved.salt).contentEquals(saved.digest) || field.start!=saved.start || field.end!=saved.end) { onResult("The field's text or selection changed. Copy your text instead."); return@launch }
+                val original=field.text
                 val replacement=TextInsertion.replacement(original,saved.start,saved.end,text)
                 if(replacement==null || node.actionList.none { it.id==AccessibilityNodeInfo.ACTION_SET_TEXT }) { onResult("This editor does not support safe insertion. Copy your text instead."); return@launch }
                 // A real edit can still race this platform action: verify and never automatically retry.
