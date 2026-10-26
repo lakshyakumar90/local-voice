@@ -1,5 +1,5 @@
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut android:shortcutId="dictate" android:enabled="true" android:icon="@drawable/ic_mic" android:shortcutShortLabel="@string/shortcut_record">
-        <intent android:action="dev.localvoice.DICTATE" android:targetPackage="dev.localvoice.app" android:targetClass="dev.localvoice.app.ui.MainActivity" />
+        <intent android:action="dev.localvoice.DICTATE" android:targetPackage="@string/shortcut_target_package" android:targetClass="dev.localvoice.app.ui.MainActivity" />
     </shortcut>
 </shortcuts>

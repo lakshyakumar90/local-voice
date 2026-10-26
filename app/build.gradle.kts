@@ -6,14 +6,37 @@ android {
     defaultConfig {
         applicationId = "dev.localvoice.app"
         minSdk = 26
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        ndk { abiFilters += if (providers.gradleProperty("localvoice.arm64").orNull == "true") listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64") }
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.1.7"
+        versionCode = 9
+        versionName = "0.2.0"
+        resValue("string", "shortcut_target_package", "dev.localvoice.app")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildFeatures { compose = true; buildConfig = true }
-    buildTypes { release { isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
+    buildFeatures { compose = true; buildConfig = true; resValues = true }
+    signingConfigs {
+        create("production") {
+            val signingStore = System.getenv("LOCALVOICE_KEYSTORE")
+            if (!signingStore.isNullOrBlank()) {
+                storeFile = file(signingStore)
+                storePassword = System.getenv("LOCALVOICE_STORE_PASSWORD")
+                keyAlias = "localvoice"
+                keyPassword = System.getenv("LOCALVOICE_STORE_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            // Coexists with prior debug installs, whose signing certificate is different.
+            applicationIdSuffix = ".release"
+            resValue("string", "shortcut_target_package", "dev.localvoice.app.release")
+            signingConfig = signingConfigs.getByName("production")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     packaging { resources.excludes += listOf("META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/LICENSE.md", "META-INF/LICENSE-notice.md") }
     lint { abortOnError = true }

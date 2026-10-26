@@ -20,6 +20,12 @@ Version 0.1.6 also recognizes natural requests such as “I want these features:
 
 Version 0.1.7 fixes first dictation into empty input fields, including missing cursor metadata and visible placeholders. See `docs/PATCH_0.1.7.md`.
 
+## Release and identity assets
+
+Version 0.2.0 introduces a dedicated signed, optimized ARM64 release and an original waveform identity. The release package `dev.localvoice.app.release` installs alongside earlier debug versions, preserving their data; it starts with its own models, permissions and history. See `docs/RELEASE_BUILD.md` for signing continuity and installation details, and `docs/RELEASE_0.2.0.md` for measured checks.
+
+The complete logo, launcher icon, illustration, social and motion kit is in `assets/brand/`. `docs/WEBSITE_DESIGN.md` specifies the future light-first website with original static layouts, credited visual references and usage/privacy/terms content requirements. No website is implemented in this release.
+
 ## Local models
 
 | Choice | Purpose | Download |

@@ -8,6 +8,7 @@ work/
 .impeccable/
 *.jks
 *.keystore
+signing/
 *.hprof
 captures/
 models/

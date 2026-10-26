@@ -5,7 +5,7 @@ android {
     ndkVersion = "27.1.12297006"
     defaultConfig {
         minSdk = 26
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        ndk { abiFilters += if (providers.gradleProperty("localvoice.arm64").orNull == "true") listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += listOf("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON", "-DCMAKE_BUILD_TYPE=Release") } }
         consumerProguardFiles("consumer-rules.pro")
     }
