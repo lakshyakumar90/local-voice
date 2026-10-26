@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DictationOutputTest {
+    @Test fun unsupportedMixedAlphabetIsRejectedRatherThanPartiallyInserted() {
+        val failure=runCatching {DictationOutput.finish("मेйджер meeting",LanguageMode.MIXED)}.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure!!.message!!.contains("Nothing was inserted"))
+        assertEquals("meeting kal hai",DictationOutput.finish("meeting कल है",LanguageMode.MIXED))
+    }
+    @Test fun degenerateDecoderLoopIsNotInsertedAsHindi() {
+        val failure=runCatching {DictationOutput.finish("मेजर "+"स्वि".repeat(25),LanguageMode.HINDI)}.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure!!.message!!.contains("Nothing was inserted"))
+        assertEquals("बहुत बहुत अच्छा।",DictationOutput.finish("बहुत बहुत अच्छा।",LanguageMode.HINDI))
+    }
     @Test fun selectedModeRoutesToExplicitRecognitionLanguage() {
         assertEquals("hi",LanguageMode.MIXED.whisperCode)
         assertEquals("hi",LanguageMode.HINDI.whisperCode)

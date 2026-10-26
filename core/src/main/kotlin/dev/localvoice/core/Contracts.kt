@@ -47,12 +47,13 @@ data class SessionState(
 /** UTF-16 indices must not split a surrogate pair. Never infer an unknown caret. */
 object TextInsertion {
     fun replacement(current: String, start: Int, end: Int, dictated: String): String? {
-        if (start !in 0..current.length || end !in start..current.length || dictated.isBlank()) return null
+        val requestedBreak=dictated=="\n" || dictated=="\n\n"
+        if (start !in 0..current.length || end !in start..current.length || dictated.isBlank() && !requestedBreak) return null
         fun splits(index: Int) = index > 0 && index < current.length && current[index - 1].isHighSurrogate() && current[index].isLowSurrogate()
         if (splits(start) || splits(end)) return null
         val prefix = current.substring(0, start)
         val suffix = current.substring(end)
-        val text = dictated.trim()
+        val text = dictated.trim(' ','\t')
         fun word(c: Char?) = c != null && (c.isLetterOrDigit() || Character.getType(c) in listOf(Character.NON_SPACING_MARK.toInt(),Character.COMBINING_SPACING_MARK.toInt(),Character.ENCLOSING_MARK.toInt()))
         val before = if (word(prefix.lastOrNull()) && word(text.firstOrNull())) " " else ""
         val after = if (word(suffix.firstOrNull()) && word(text.lastOrNull())) " " else ""

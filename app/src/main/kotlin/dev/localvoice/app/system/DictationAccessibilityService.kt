@@ -14,6 +14,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import dev.localvoice.app.graph
 import dev.localvoice.core.TextInsertion
 import dev.localvoice.core.SessionPhase
+import dev.localvoice.core.RecordingLimits
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.security.MessageDigest
@@ -44,7 +45,7 @@ class DictationAccessibilityService : AccessibilityService() {
             feedback=false;controls.hide();clearTarget();graph.session.cancel();updateBubble()
         },{
             val text=graph.session.state.value.transcript
-            if(text.isNotBlank()) {
+            if(text.isNotEmpty()) {
                 getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("Dictation",text))
                 feedback=false;controls.hide();graph.session.reset();updateBubble()
             }
@@ -131,7 +132,7 @@ class DictationAccessibilityService : AccessibilityService() {
         clearTarget()
         target=if(n.textSelectionStart>=0 && n.textSelectionEnd>=n.textSelectionStart) Target(token,n.packageName.toString(),n.windowId,n.viewIdResourceName,AccessibilityNodeInfo.obtain(n),n.className.toString(),digest(text,salt),salt,n.textSelectionStart,n.textSelectionEnd,generation) else null
         overlayFlow=token;detached=true
-        targetExpiry=scope.launch {delay(300_000);if(target?.token==token) clearTarget()}
+        targetExpiry=scope.launch {delay(RecordingLimits.TARGET_LIFETIME_MS);if(target?.token==token) clearTarget()}
         if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
             detached=false;overlayFlow=null;clearTarget()
             graph.session.fail("Allow microphone access in Local Voice settings before using the field mic.")
@@ -153,7 +154,7 @@ class DictationAccessibilityService : AccessibilityService() {
         overlayFlow=null
         target=null // A target is single use; no duplicate action after an uncertain acknowledgement.
         scope.launch {try {
-            if(saved==null || saved.token!=token || android.os.SystemClock.elapsedRealtime()-saved.createdAt>300_000) { onResult("The original field is no longer available. Copy your text instead."); return@launch }
+            if(saved==null || saved.token!=token || android.os.SystemClock.elapsedRealtime()-saved.createdAt>RecordingLimits.TARGET_LIFETIME_MS) { onResult("The original field is no longer available. Copy your text instead."); return@launch }
             repeat(20) {
                 delay(100)
                 if(graph.session.state.value!==expectedResult) {onResult("This dictation changed before insertion. Copy the current result instead.");return@launch}

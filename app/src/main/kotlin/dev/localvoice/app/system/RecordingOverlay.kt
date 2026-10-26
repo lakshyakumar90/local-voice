@@ -58,7 +58,7 @@ class RecordingOverlay(private val context: Context,stop: () -> Unit,cancel: () 
         phase=state.phase
         label.text=when(phase) {
             SessionPhase.PREPARING -> "Starting microphone…"
-            SessionPhase.RECORDING -> "Recording\n${playTime(state.elapsedMs)}"
+            SessionPhase.RECORDING -> "Recording\n${playTime(state.elapsedMs)} / 10:00"
             SessionPhase.RESULT -> state.message.ifBlank {"Couldn’t insert text. Copy to paste."}
             SessionPhase.ERROR -> state.message
             else -> "Transcribing…"

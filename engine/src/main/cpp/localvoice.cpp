@@ -5,10 +5,17 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <limits>
+#include "script_policy.h"
 
-struct Context { whisper_context *model; std::atomic<bool> cancelled{false}; };
+struct Context { whisper_context *model; std::atomic<bool> cancelled{false}; std::vector<int> arabic_tokens; };
 static void quiet_log(ggml_log_level, const char *, void *) {}
 static bool aborted(void *data) { return static_cast<Context *>(data)->cancelled.load(); }
+static void hindi_script(whisper_context *, whisper_state *, const whisper_token_data *, int, float *logits, void *data) {
+    // Every regular Arabic/Urdu UTF-8 character has a D8..DF lead byte, even in split BPE pieces.
+    // Keep Latin tokens available for English words in mixed speech. Final script validation remains.
+    for (int id : static_cast<Context *>(data)->arabic_tokens) logits[id] = -std::numeric_limits<float>::infinity();
+}
 static void fail(JNIEnv *env, const char *message) { env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), message); }
 static jstring utf8(JNIEnv *env, const std::string &text) {
     jbyteArray bytes = env->NewByteArray(static_cast<jsize>(text.size()));
@@ -28,13 +35,16 @@ extern "C" JNIEXPORT jlong JNICALL Java_dev_localvoice_engine_WhisperNative_load
     env->ReleaseStringUTFChars(path, name);
     if (!model) { fail(env, "The local model could not be loaded. Check its files or choose a smaller model."); return 0; }
     auto *ctx = new Context(); ctx->model = model;
+    for (int id = 0; id < whisper_n_vocab(model); ++id) {
+        if (uses_arabic_utf8_lead(whisper_token_to_str(model, id))) ctx->arabic_tokens.push_back(id);
+    }
     return reinterpret_cast<jlong>(ctx);
 }
 extern "C" JNIEXPORT jstring JNICALL Java_dev_localvoice_engine_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle, jfloatArray input, jstring language, jint threads) {
     auto *ctx = reinterpret_cast<Context *>(handle);
     if (!ctx || !ctx->model) { fail(env, "No model is loaded."); return nullptr; }
     const auto count = env->GetArrayLength(input);
-    if (count <= 0 || count > 16000 * 120) { fail(env, "Audio is empty or exceeds two minutes."); return nullptr; }
+    if (count <= 0 || count > 16000 * 600) { fail(env, "Audio is empty or exceeds ten minutes."); return nullptr; }
     std::vector<float> pcm(count); env->GetFloatArrayRegion(input, 0, count, pcm.data());
     const char *code = env->GetStringUTFChars(language, nullptr);
     const bool hindi = std::string(code) == "hi";
@@ -47,12 +57,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_dev_localvoice_engine_WhisperNative_tr
     params.n_threads = std::clamp(static_cast<int>(threads), 1, 4);
     params.language = code; params.translate = false;
     params.detect_language = false;
-    // Context is sample transcription, not an instruction (Whisper is not an instruction model).
-    // Both Hindi modes decode to Devanagari first; Romanization happens only after recognition.
-    params.initial_prompt = hindi ? "नमस्ते। आज मुझे काम करना है। मेरी meeting कल है।" : nullptr;
+    // Do not seed made-up Hindi sentences: small models can echo them as invented speech.
+    params.initial_prompt = nullptr;
+    if (hindi) {params.logits_filter_callback = hindi_script; params.logits_filter_callback_user_data = ctx;}
     params.beam_search.beam_size = 5;
-    // Hotter fallback decoding can drift into English paraphrases on short Hindi clips.
-    if (hindi) { params.temperature = 0.0f; params.temperature_inc = 0.0f; }
+    // Retain entropy/log-probability fallback to escape degenerate repetitions.
+    // The language/task prefix remains fixed to Hindi transcription at every temperature.
     params.no_context = true; params.single_segment = false;
     params.print_realtime = false; params.print_progress = false; params.print_timestamps = false; params.print_special = false;
     params.suppress_blank = true; params.suppress_nst = true;

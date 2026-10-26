@@ -25,6 +25,7 @@ class SessionCoordinator(private val graph: AppGraph) {
     private var sessionId = ""
     private var model: ModelDescriptor? = null
     private var language = LanguageMode.MIXED
+    private var formatting = FormattingMode.SMART
     private var resultDuration = 0L
     private var changingModel = false
     private class LiveRun {
@@ -62,7 +63,7 @@ class SessionCoordinator(private val graph: AppGraph) {
         val selected = graph.catalog.find(prefs.modelId) ?: graph.catalog.models.first()
         if(!selected.supports(prefs.language)) { fail("This model supports English only. Change the language or choose Whisper."); return }
         if(!graph.models.installed(selected)) { fail("Download ${selected.name} from Models before recording."); return }
-        model=selected; language=prefs.language; sessionId=UUID.randomUUID().toString()
+        model=selected; language=prefs.language; formatting=prefs.formatting; sessionId=UUID.randomUUID().toString()
         val token = ++generation
         mutable.value=SessionState(SessionPhase.PREPARING,message="Loading ${selected.name}")
         job=graph.scope.launch {
@@ -125,7 +126,7 @@ class SessionCoordinator(private val graph: AppGraph) {
             var crop: AudioClip? = null
             try {
                 require(audio.durationMs >= 200 && audio.pcm.any { it != 0f }) { "No speech recorded. Try speaking again." }
-                val result=withTimeout(maxOf(30_000L,audio.durationMs*2).coerceAtMost(240_000L)) {
+                val result=withTimeout(RecordingLimits.processingTimeoutMs(audio.durationMs)) {
                     val vad=graph.catalog.vad.takeIf(graph.models::installed)?.let { graph.models.directory(it).resolve(it.files.first().name).absolutePath }
                     val liveText=liveRun?.result?.await()
                     liveRun?.job?.join()
@@ -135,12 +136,12 @@ class SessionCoordinator(private val graph: AppGraph) {
                     if(raw.isBlank() && crop !== audio) engine!!.transcribe(audio,language) else raw
                 }
                 if(token != generation) return@launch
-                val text=DictationOutput.finish(result,language)
-                require(text.isNotBlank()) { "No speech detected. Try recording again." }
+                val text=withContext(Dispatchers.Default) {DictationOutput.finish(result,language,formatting)}
+                require(text.isNotBlank() || text=="\n" || text=="\n\n") { "No speech detected. Try recording again." }
                 var saved: String?=null
-                var warning=""
+                var warning=if(text.isBlank()) "Line break ready." else ""
                 val prefs=graph.preferences.value
-                if(prefs.autoHistory) {
+                if(prefs.autoHistory && text.isNotBlank()) {
                     try {saved=graph.history.save(text,descriptor.name,language.label,audio.durationMs,if(prefs.retainAudio) audio else null,sessionId)}
                     catch(cancel: CancellationException) {throw cancel}
                     catch(e: Exception) {warning="Your text is ready, but history could not be saved. Copy or export it before closing."}

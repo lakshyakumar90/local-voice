@@ -157,13 +157,13 @@ class RecordingActivity : ComponentActivity() {
             Text("Audio stays on this phone",color=colors.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
             when(state.phase) {
                 SessionPhase.RECORDING -> {
-                    Surface(color=colors.secondaryContainer,shape=androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {Text("${time(state.elapsedMs)} / 02:00",Modifier.padding(16.dp),style=MaterialTheme.typography.titleLarge)}
+                    Surface(color=colors.secondaryContainer,shape=androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {Text("${time(state.elapsedMs)} / 10:00",Modifier.padding(16.dp),style=MaterialTheme.typography.titleLarge)}
                     Canvas(Modifier.fillMaxWidth().height(110.dp)) {
                         val heights=listOf(.45f,.72f,1f,.78f,.5f)
                         val width=12.dp.toPx();val gap=10.dp.toPx();val total=5*width+4*gap
                         heights.forEachIndexed {i,factor -> val h=(12.dp.toPx()+size.height*.8f*state.level*factor);drawRoundRect(colors.primary,Offset((size.width-total)/2+i*(width+gap),(size.height-h)/2),Size(width,h),CornerRadius(width/2))}
                     }
-                    Text(if(state.elapsedMs>=110_000) "Recording will stop at two minutes" else "Listening",style=MaterialTheme.typography.titleMedium)
+                    Text(if(state.elapsedMs>=590_000) "Recording will stop at ten minutes" else "Listening",style=MaterialTheme.typography.titleMedium)
                     if(state.partial.isNotBlank()) SelectionContainer { Text(state.partial,style=MaterialTheme.typography.bodyLarge) }
                     Text("$model · $language",style=MaterialTheme.typography.bodyMedium,color=colors.onSurfaceVariant)
                     Button(onClick=stop,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp)) {Icon(Icons.Outlined.Stop,null);Spacer(Modifier.width(8.dp));Text("Stop and transcribe")}

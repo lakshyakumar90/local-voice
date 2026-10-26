@@ -2,7 +2,7 @@
 
 Implementation date: 2026-10-25. Project root: `C:\Lakshya\wispr`.
 
-This document records the initial implementation. Current behavior changes are in `PATCH_0.1.1.md` and `PATCH_0.1.2.md`: mixed mode uses Hindi-led recognition, Roman Hindi spelling includes medial schwa deletion, and unexpected Arabic/Urdu-script output is blocked before delivery. Android's separate Accessibility shortcut can be disabled while keeping the input-field bubble and app shortcuts.
+This document records the initial implementation. Later patches supersede its original limits: `PATCH_0.1.3.md` adds audio playback and reorganized settings; `PATCH_0.1.4.md` removes field-mic activity launches and strengthens Hindi decoding; `PATCH_0.1.5.md` adds local formatting and a ten-minute recording bound. Read those patches for current verification and remaining device limits. Android's separate Accessibility shortcut can be disabled while keeping the input-field bubble and app shortcuts.
 
 ## Implemented
 

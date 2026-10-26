@@ -9,6 +9,7 @@ import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
 import dev.localvoice.core.AudioClip
 import dev.localvoice.core.PcmResampler
+import dev.localvoice.core.RecordingLimits
 import kotlinx.coroutines.*
 import kotlin.math.sqrt
 
@@ -33,7 +34,7 @@ class LocalRecorder(private val context: Context) {
         recorder = audio; discarded = false; running = true
         try { audio.startRecording(); check(audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) } catch(e: Exception) { running=false; audio.release(); recorder=null; throw e }
         capture = scope.async(Dispatchers.IO) {
-            val samples = ShortArray(rate*120)
+            val samples = ShortArray(rate*RecordingLimits.MAX_SECONDS)
             val buffer = ShortArray(rate/25)
             var offset = 0
             try {

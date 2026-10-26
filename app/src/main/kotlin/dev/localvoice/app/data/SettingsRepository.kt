@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dev.localvoice.core.LanguageMode
+import dev.localvoice.core.FormattingMode
 import kotlinx.coroutines.flow.map
 
 private val Context.preferences by preferencesDataStore("preferences")
@@ -14,6 +15,7 @@ data class UserSettings(
     val bubble: Boolean = false, val accessibilityConsent: Boolean = false,
     val excludedApps: Set<String> = emptySet(),
     val bubbleX: Float = 1f, val bubbleY: Float = .45f,
+    val formatting: FormattingMode = FormattingMode.SMART,
 )
 class SettingsRepository(private val context: Context) {
     private val language = stringPreferencesKey("language")
@@ -26,14 +28,17 @@ class SettingsRepository(private val context: Context) {
     private val excluded = stringSetPreferencesKey("excluded_apps")
     private val x = floatPreferencesKey("bubble_x")
     private val y = floatPreferencesKey("bubble_y")
+    private val formatting = stringPreferencesKey("formatting")
     val data = context.preferences.data.map { p -> UserSettings(
         language = runCatching { LanguageMode.valueOf(p[language].orEmpty()) }.getOrDefault(LanguageMode.MIXED),
         modelId = p[model] ?: "whisper-base", theme = p[theme] ?: "light",
         autoHistory = p[autoHistory] ?: false, retainAudio = p[retainAudio] ?: false,
         bubble = p[bubble] ?: false, accessibilityConsent = p[consent] ?: false,
         excludedApps = p[excluded] ?: emptySet(), bubbleX = p[x] ?: 1f, bubbleY = p[y] ?: .45f,
+        formatting = runCatching {FormattingMode.valueOf(p[formatting].orEmpty())}.getOrDefault(FormattingMode.SMART),
     ) }
     suspend fun language(value: LanguageMode) { context.preferences.edit { it[language] = value.name } }
+    suspend fun formatting(value: FormattingMode) {context.preferences.edit {it[formatting]=value.name}}
     suspend fun model(value: String) { context.preferences.edit { it[model] = value } }
     suspend fun theme(value: String) { require(value in listOf("light","dark","system")); context.preferences.edit { it[theme] = value } }
     suspend fun history(value: Boolean) { context.preferences.edit { it[autoHistory] = value; if(!value) it[retainAudio] = false } }

@@ -12,7 +12,7 @@ Implemented foundation: Kotlin/Jetpack Compose, native Android services, Room/Da
 
 ## Users
 
-People dictating messages, email and notes with their existing Android keyboard, including English, Hindi and Hinglish speakers. No physical baseline device has been chosen.
+People dictating messages, email and notes with their existing Android keyboard, including English, Hindi and Hinglish speakers. The user reports testing on a Motorola Edge 60 Pro with Android 17; that device is not connected to this build environment.
 
 ## Product Purpose
 
@@ -24,11 +24,11 @@ Model choice and local processing are central. A guided everyday experience expo
 
 ## Operating Context
 
-Main setup/settings app, focused-field microphone bubble, compact visible recording activity, foreground microphone capture, final guarded insertion, and explicit Copy fallback. The activity is the current engineering baseline; a pure overlay recording path remains unverified.
+Main setup/settings app, focused-field microphone bubble, non-focusable recording overlay, foreground microphone capture, local formatting, guarded insertion, and inline Copy fallback. In-app entry points retain their recording activity. Desktop/build checks cannot verify Android overlay lifecycle; the user reports the preceding editor-only flow works.
 
 ## Capabilities and Constraints
 
-Confirmed earlier: Play plus APK distribution; natural mixed-script Hinglish; two-minute MVP sessions; second engine may be English-only. Proposed baseline: API 26, ARM64, 4 GB RAM. Recognition, VAD, language identification and cleanup are different capabilities. No universal insertion, fabricated benchmarks, silent recording, required paid API or bundled download of every model.
+Current request extends the original two-minute MVP limit to ten minutes and adds offline list/paragraph/punctuation formatting inspired by Wispr Flow research. The formatting layer uses conservative text rules with an Original wording option; it does not provide generative rewording or cloud processing. English, Hindi script and Roman Hindi remain separate output choices. Proposed baseline: API 26, ARM64, 4 GB RAM; larger models and long sessions need phone measurements. Recognition, VAD, language identification and cleanup are different capabilities. No universal insertion, fabricated benchmarks, silent recording, required paid API or bundled download of every model.
 
 ## Brand Commitments
 

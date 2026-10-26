@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -20,6 +21,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import dev.localvoice.app.AppGraph
 import dev.localvoice.app.R
@@ -61,6 +63,16 @@ import dev.localvoice.app.data.UserSettings
             dev.localvoice.core.LanguageMode.HINDI -> "Hindi speech, written in देवनागरी. English words can stay in English."
             dev.localvoice.core.LanguageMode.MIXED -> "Hindi and English speech, with Hindi in Roman letters: कल मिलते हैं → kal milte hain."
         },style=MaterialTheme.typography.bodyMedium)
+        HorizontalDivider()
+        Text("Formatting",style=MaterialTheme.typography.titleMedium)
+        dev.localvoice.core.FormattingMode.entries.forEach {mode ->
+            Row(Modifier.fillMaxWidth().heightIn(min=48.dp).selectable(selected=prefs.formatting==mode,role=Role.RadioButton,onClick={action {check(!graph.session.busy) {"Finish dictation before changing formatting."};graph.settings.formatting(mode)}}),verticalAlignment=Alignment.CenterVertically) {
+                RadioButton(selected=prefs.formatting==mode,onClick=null)
+                Text(mode.label)
+            }
+        }
+        Text(if(prefs.formatting==dev.localvoice.core.FormattingMode.SMART) "Local lists, paragraphs and punctuation. Say ‘new paragraph’, ‘bullet point’, or ‘first… second…’. Removes um/uh and clear numeric corrections; keeps your language." else "Keeps the model’s wording and punctuation, without cleanup or spoken formatting commands.",style=MaterialTheme.typography.bodyMedium)
+        Text("Up to 10 minutes per recording. Longer recordings take more time to transcribe locally.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
         "Appearance" -> {
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("light","dark","system").forEach {mode -> FilterChip(selected=prefs.theme==mode,onClick={action {graph.settings.theme(mode)}},label={Text(mode.replaceFirstChar {it.uppercase()})})}}
