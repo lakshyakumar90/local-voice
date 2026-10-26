@@ -13,13 +13,14 @@ import dev.localvoice.core.SessionPhase
 import dev.localvoice.core.SessionState
 
 /** A non-focusable control bar: the editor/keyboard retain input focus during capture. */
-class RecordingOverlay(private val context: Context,stop: () -> Unit,cancel: () -> Unit) {
+class RecordingOverlay(private val context: Context,stop: () -> Unit,cancel: () -> Unit,copy: () -> Unit) {
     private val wm=context.getSystemService(WindowManager::class.java)
     private val density=context.resources.displayMetrics.density
     private fun dp(value: Int)=(value*density).toInt()
     private var attached=false
+    private var phase=SessionPhase.IDLE
     private val label=TextView(context).apply {textSize=14f;setTypeface(typeface,Typeface.BOLD);setPadding(dp(12),0,dp(12),0);gravity=Gravity.CENTER_VERTICAL;minHeight=dp(56)}
-    private val stopButton=Button(context).apply {text="Stop";isAllCaps=false;minimumWidth=dp(56);minimumHeight=dp(48);setOnClickListener {stop()};contentDescription="Stop recording and insert text"}
+    private val stopButton=Button(context).apply {text="Stop";isAllCaps=false;minimumWidth=dp(56);minimumHeight=dp(48);setOnClickListener {if(phase==SessionPhase.RESULT) copy() else stop()};contentDescription="Stop recording and insert text"}
     private val cancelButton=Button(context).apply {text="Cancel";isAllCaps=false;minimumWidth=dp(64);minimumHeight=dp(48);setOnClickListener {cancel()}}
     private val bar=LinearLayout(context).apply {
         orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(dp(4),dp(4),dp(8),dp(4))
@@ -54,8 +55,18 @@ class RecordingOverlay(private val context: Context,stop: () -> Unit,cancel: () 
         cancelButton.backgroundTintList=android.content.res.ColorStateList.valueOf(if(dark) Color.rgb(59,76,67) else Color.rgb(212,223,217))
         cancelButton.setTextColor(foreground)
         bar.background=GradientDrawable().apply {cornerRadius=dp(16).toFloat();setColor(if(dark) Color.rgb(33,48,41) else Color.rgb(238,244,241))}
-        label.text=if(state.phase==SessionPhase.RECORDING) "Recording\n${playTime(state.elapsedMs)}" else "Transcribing…"
-        stopButton.visibility=if(state.phase==SessionPhase.RECORDING) View.VISIBLE else View.GONE
+        phase=state.phase
+        label.text=when(phase) {
+            SessionPhase.PREPARING -> "Starting microphone…"
+            SessionPhase.RECORDING -> "Recording\n${playTime(state.elapsedMs)}"
+            SessionPhase.RESULT -> state.message.ifBlank {"Couldn’t insert text. Copy to paste."}
+            SessionPhase.ERROR -> state.message
+            else -> "Transcribing…"
+        }
+        stopButton.text=if(phase==SessionPhase.RESULT) "Copy" else "Stop"
+        stopButton.contentDescription=if(phase==SessionPhase.RESULT) "Copy dictation" else "Stop recording and insert text"
+        stopButton.visibility=if(phase in listOf(SessionPhase.RECORDING,SessionPhase.RESULT)) View.VISIBLE else View.GONE
+        cancelButton.text=if(phase in listOf(SessionPhase.RESULT,SessionPhase.ERROR)) "Done" else "Cancel"
         if(!attached) {
             val screen=context.resources.displayMetrics
             params.x=((screen.widthPixels-params.width)*prefs.bubbleX).toInt().coerceAtLeast(0)

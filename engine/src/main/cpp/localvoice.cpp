@@ -37,9 +37,22 @@ extern "C" JNIEXPORT jstring JNICALL Java_dev_localvoice_engine_WhisperNative_tr
     if (count <= 0 || count > 16000 * 120) { fail(env, "Audio is empty or exceeds two minutes."); return nullptr; }
     std::vector<float> pcm(count); env->GetFloatArrayRegion(input, 0, count, pcm.data());
     const char *code = env->GetStringUTFChars(language, nullptr);
-    auto params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    const bool hindi = std::string(code) == "hi";
+    if (hindi && !whisper_is_multilingual(ctx->model)) {
+        env->ReleaseStringUTFChars(language, code);
+        std::fill(pcm.begin(), pcm.end(), 0.f);
+        fail(env, "Hindi requires a multilingual Whisper model."); return nullptr;
+    }
+    auto params = whisper_full_default_params(hindi ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
     params.n_threads = std::clamp(static_cast<int>(threads), 1, 4);
     params.language = code; params.translate = false;
+    params.detect_language = false;
+    // Context is sample transcription, not an instruction (Whisper is not an instruction model).
+    // Both Hindi modes decode to Devanagari first; Romanization happens only after recognition.
+    params.initial_prompt = hindi ? "नमस्ते। आज मुझे काम करना है। मेरी meeting कल है।" : nullptr;
+    params.beam_search.beam_size = 5;
+    // Hotter fallback decoding can drift into English paraphrases on short Hindi clips.
+    if (hindi) { params.temperature = 0.0f; params.temperature_inc = 0.0f; }
     params.no_context = true; params.single_segment = false;
     params.print_realtime = false; params.print_progress = false; params.print_timestamps = false; params.print_special = false;
     params.suppress_blank = true; params.suppress_nst = true;

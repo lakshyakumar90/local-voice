@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,7 +39,10 @@ import dev.localvoice.app.data.UserSettings
     fun open(action: String) { runCatching { context.startActivity(Intent(action)) }.onFailure { message("Open this app's settings in Android Settings.") } }
     Column(modifier.verticalScroll(scroll).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
         if(section!=null) {
-            TextButton(onClick={section=null}) {Text("Back to settings")}
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                IconButton(onClick={section=null}) {Icon(Icons.AutoMirrored.Outlined.ArrowBack,contentDescription="Back to settings")}
+                Text("Settings",style=MaterialTheme.typography.titleMedium)
+            }
             Text(when(section) {"Microphone"->"Microphone in other apps";"Storage"->"History & recordings";"Excluded"->"Excluded apps";"Privacy"->"Privacy & about";else->section.orEmpty()},style=MaterialTheme.typography.titleLarge)
         }
         when(section) {
@@ -52,7 +56,11 @@ import dev.localvoice.app.data.UserSettings
         }
         "Dictation" -> {
         LanguageChips(prefs.language) { action {check(!graph.session.busy) {"Finish dictation before changing language."};graph.settings.language(it)} }
-        Text("English + Roman Hindi uses Hindi-led recognition to avoid automatic Urdu detection, then writes Hindi in English letters: मुझे कल जाना है → mujhe kal jaana hai. Use English mode for entirely English recordings. For Hindi with English words, use multilingual Whisper; try Small if Base misses words. Recognition and Roman spelling can still make mistakes.",style=MaterialTheme.typography.bodyMedium)
+        Text(when(prefs.language) {
+            dev.localvoice.core.LanguageMode.ENGLISH -> "English speech, written in English."
+            dev.localvoice.core.LanguageMode.HINDI -> "Hindi speech, written in देवनागरी. English words can stay in English."
+            dev.localvoice.core.LanguageMode.MIXED -> "Hindi and English speech, with Hindi in Roman letters: कल मिलते हैं → kal milte hain."
+        },style=MaterialTheme.typography.bodyMedium)
         }
         "Appearance" -> {
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("light","dark","system").forEach {mode -> FilterChip(selected=prefs.theme==mode,onClick={action {graph.settings.theme(mode)}},label={Text(mode.replaceFirstChar {it.uppercase()})})}}
